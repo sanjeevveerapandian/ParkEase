@@ -63,7 +63,7 @@ namespace ParkEase.Api.Services
             {
                 Name = dto.Name,
                 Address = dto.Address,
-                OperatorId = operatorId // taken from JWT claim, not client input — see DTO note above
+                OperatorId = operatorId // taken from JWT claim, not client input
             };
 
             _context.ParkingLots.Add(lot);
@@ -91,14 +91,16 @@ namespace ParkEase.Api.Services
             return true;
         }
 
-        public async Task<List<ParkingSlotDto>> GetSlotsForLotAsync(int lotId, int requestingUserId, bool isAdmin)
+        public async Task<List<ParkingSlotDto>> GetSlotsForLotAsync(int lotId)
         {
             var lot = await _context.ParkingLots.Include(l => l.Slots)
                 .FirstOrDefaultAsync(l => l.Id == lotId);
 
             if (lot == null) return new List<ParkingSlotDto>();
-            if (!isAdmin && lot.OperatorId != requestingUserId) return new List<ParkingSlotDto>();
 
+            // No ownership check here deliberately — any authenticated user (including Drivers)
+            // needs to browse a lot's slot availability in order to book one. Management
+            // actions (create/delete lot, add slot) remain ownership-scoped below.
             return lot.Slots.Select(s => new ParkingSlotDto
             {
                 Id = s.Id,

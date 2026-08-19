@@ -90,13 +90,16 @@ namespace ParkEase.Api.Controllers
         }
 
         /// <summary>
-        /// Lists all slots for a given lot, subject to the same ownership scoping.
+        /// Lists all slots for a given lot. Open to any authenticated role (including Driver),
+        /// since browsing availability is required for the booking flow — not ownership-scoped
+        /// like the management endpoints above.
         /// </summary>
         [HttpGet("{id}/slots")]
+        [Authorize]
         [ProducesResponseType(typeof(List<ParkingSlotDto>), 200)]
         public async Task<IActionResult> GetSlots(int id)
         {
-            var slots = await _service.GetSlotsForLotAsync(id, GetUserId(), IsAdmin());
+            var slots = await _service.GetSlotsForLotAsync(id);
             return Ok(slots);
         }
 

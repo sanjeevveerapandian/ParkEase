@@ -11,7 +11,7 @@ namespace ParkEase.Api.Services
         Task<ParkingLotDto> CreateLotAsync(CreateParkingLotDto dto, int operatorId);
         Task<bool> DeleteLotAsync(int lotId, int requestingUserId, bool isAdmin);
 
-        Task<List<ParkingSlotDto>> GetSlotsForLotAsync(int lotId, int requestingUserId, bool isAdmin);
+        Task<List<ParkingSlotDto>> GetSlotsForLotAsync(int lotId);
         Task<ParkingSlotDto?> CreateSlotAsync(int lotId, CreateParkingSlotDto dto, int requestingUserId, bool isAdmin);
     }
 }
