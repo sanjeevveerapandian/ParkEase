@@ -8,15 +8,16 @@ namespace ParkEase.Api.Services
     public class BookingService : IBookingService
     {
         private readonly ApplicationDbContext _context;
-
+        private readonly INotificationService _notificationService;
         // Business rules, named as constants so they're documented and easy to tune —
         // never "magic numbers" buried inline in the calculation.
         private const int OverstayThresholdHours = 24;
         private const decimal OverstayPenaltyMultiplier = 1.5m; // 50% surcharge on overstay hours
 
-        public BookingService(ApplicationDbContext context)
+        public BookingService(ApplicationDbContext context, INotificationService notificationService)
         {
             _context = context;
+            _notificationService = notificationService;
         }
 
         public async Task<BookingDto?> CreateBookingAsync(CreateBookingDto dto, int driverId)
@@ -37,6 +38,12 @@ namespace ParkEase.Api.Services
             slot.Status = SlotStatus.Occupied; // mark the slot taken immediately
             _context.VehicleBookings.Add(booking);
             await _context.SaveChangesAsync();
+
+            var driver = await _context.Users.FindAsync(driverId);
+            if (driver != null)
+            {
+                await _notificationService.SendBookingConfirmationAsync(booking, driver.Email);
+            }
 
             return ToDto(booking, slot.SlotNumber);
         }
@@ -85,6 +92,13 @@ namespace ParkEase.Api.Services
             booking.ParkingSlot.Status = SlotStatus.Available; // free up the slot
 
             await _context.SaveChangesAsync();
+
+            var driverUser = await _context.Users.FindAsync(booking.UserId);
+            if (driverUser != null)
+            {
+                await _notificationService.SendExitReceiptAsync(booking, driverUser.Email);
+            }
+
             return ToDto(booking, booking.ParkingSlot.SlotNumber);
         }
 
