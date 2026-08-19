@@ -48,7 +48,22 @@ builder.Services.AddAuthorization();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
-    options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo { Title = "ParkEase API", Version = "v1" });
+    options.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
+    {
+        Title = "ParkEase API",
+        Version = "v1",
+        Description = "Full-stack Smart Parking Management System — real-time slot booking, " +
+                       "role-based access (Driver/Operator/Admin), automated billing and email notifications.",
+        Contact = new Microsoft.OpenApi.Models.OpenApiContact
+        {
+            Name = "Sanjeev Veerapandian",
+            Email = "sanjeevveerapandian@gmail.com"
+        }
+    });
+
+    var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
+    options.IncludeXmlComments(xmlPath);
 
     options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
     {
@@ -77,6 +92,8 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 var app = builder.Build();
+
+app.UseMiddleware<ParkEase.Api.Middleware.GlobalExceptionMiddleware>();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
