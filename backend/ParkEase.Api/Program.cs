@@ -18,6 +18,7 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IParkingLotService, ParkingLotService>();
 builder.Services.AddScoped<IBookingService, BookingService>();
 builder.Services.AddHttpClient<INotificationService, EmailNotificationService>();
+builder.Services.AddScoped<IReportService, ReportService>();
 
 var jwtKey = builder.Configuration["Jwt:Key"]!;
 var jwtIssuer = builder.Configuration["Jwt:Issuer"]!;
@@ -108,5 +109,25 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+
+// Seed a default Admin account on first run, so a fresh clone of this repo
+// always has a working Admin login for testing — satisfies "seeded roles/users".
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    if (!db.Users.Any(u => u.Role == ParkEase.Api.Models.UserRole.Admin))
+    {
+        db.Users.Add(new ParkEase.Api.Models.User
+        {
+            FullName = "System Admin",
+            Email = "admin@parkease.com",
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin@123"),
+            PhoneNumber = "9999999999",
+            Role = ParkEase.Api.Models.UserRole.Admin
+        });
+        db.SaveChanges();
+        Console.WriteLine("Seeded default Admin: admin@parkease.com / Admin@123");
+    }
+}
 
 app.Run();
