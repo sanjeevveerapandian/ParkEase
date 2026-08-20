@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using ParkEase.Api.Authorization;
 using ParkEase.Api.DTOs;
 using ParkEase.Api.Services;
 
@@ -7,7 +8,7 @@ namespace ParkEase.Api.Controllers
 {
     [ApiController]
     [Route("api/reports")]
-    [Authorize(Roles = "Admin")]
+    [Authorize(Policy = AuthPolicies.AdminOnly)]
     public class ReportsController : ControllerBase
     {
         private readonly IReportService _service;

@@ -10,6 +10,7 @@ import {
   Building2,
   Car,
 } from "lucide-react";
+import { Badge, LinkButton, buttonVariants } from "../components/ui";
 
 const features = [
   {
@@ -59,12 +60,7 @@ export default function LandingPage() {
             >
               Log in
             </Link>
-            <Link
-              to="/register"
-              className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-indigo-500"
-            >
-              Get Started
-            </Link>
+            <LinkButton to="/register">Get Started</LinkButton>
           </div>
         </div>
       </nav>
@@ -80,9 +76,11 @@ export default function LandingPage() {
           }}
         />
         <div className="relative mx-auto max-w-4xl px-4 py-24 text-center sm:px-6 lg:px-8">
-          <span className="mb-6 inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700 ring-1 ring-inset ring-indigo-600/20">
-            <Zap size={12} /> Real-time parking, made simple
-          </span>
+          <div className="mb-6">
+            <Badge tone="indigo">
+              <Zap size={12} /> Real-time parking, made simple
+            </Badge>
+          </div>
           <h1 className="text-4xl font-bold tracking-tight text-slate-900 sm:text-5xl">
             Smart parking management,
             <br />
@@ -92,15 +90,18 @@ export default function LandingPage() {
             Find, book, and pay for parking in seconds — or manage every lot you run from one live dashboard.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+            {/* Bigger hero-sized CTAs than the default Button/LinkButton — same brand
+                colors though, pulled from buttonVariants so a re-theme only ever
+                touches ui.tsx, not this hardcoded size variant too. */}
             <Link
               to="/register"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-500"
+              className={`inline-flex items-center gap-1.5 rounded-lg px-5 py-3 text-sm font-semibold transition-colors ${buttonVariants.primary}`}
             >
               Get Started Free <ArrowRight size={16} />
             </Link>
             <Link
               to="/login"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+              className={`inline-flex items-center gap-1.5 rounded-lg px-5 py-3 text-sm font-semibold transition-colors ${buttonVariants.secondary}`}
             >
               Log in
             </Link>

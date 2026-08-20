@@ -19,10 +19,12 @@ namespace ParkEase.Api.Services
             _context = context;
         }
 
-        // Stored times are always UTC (DateTime.UtcNow at write time). Emails go to Indian
-        // drivers, so render in IST rather than raw UTC — a fixed +5:30 offset rather than
-        // a TimeZoneInfo lookup, since IST has no DST and Windows/Linux use different zone
-        // ID formats ("India Standard Time" vs "Asia/Kolkata") that would break portability.
+        // Every DateTime handed to this method is already correctly Kind=Utc, guaranteed by
+        // ApplicationDbContext's global value converter (see OnModelCreating) — this method's
+        // only job is the display conversion. Emails go to Indian drivers, so render in IST
+        // rather than raw UTC — a fixed +5:30 offset rather than a TimeZoneInfo lookup, since
+        // IST has no DST and Windows/Linux use different zone ID formats ("India Standard
+        // Time" vs "Asia/Kolkata") that would break portability.
         private static string FormatIst(DateTime utc) =>
             $"{utc.AddHours(5.5):dd MMM yyyy, hh:mm tt} IST";
 

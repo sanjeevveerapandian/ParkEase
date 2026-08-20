@@ -20,14 +20,6 @@ namespace ParkEase.Api.Services
             _notificationService = notificationService;
         }
 
-        // SQL Server's datetime2 columns carry no timezone info, so EF Core reads every
-        // DateTime back with Kind=Unspecified even though we always write DateTime.UtcNow.
-        // System.Text.Json then serializes it WITHOUT a "Z"/offset, and JS's Date parser
-        // treats a timezone-less ISO string as local time — silently shifting every
-        // timestamp by the client's UTC offset. Re-tag as Utc before it leaves this layer.
-        private static DateTime AsUtc(DateTime dt) => DateTime.SpecifyKind(dt, DateTimeKind.Utc);
-        private static DateTime? AsUtc(DateTime? dt) => dt.HasValue ? DateTime.SpecifyKind(dt.Value, DateTimeKind.Utc) : null;
-
         public async Task<BookingDto?> CreateBookingAsync(CreateBookingDto dto, int driverId)
         {
             var slot = await _context.ParkingSlots.FindAsync(dto.ParkingSlotId);
@@ -110,15 +102,33 @@ namespace ParkEase.Api.Services
             return ToDto(booking, booking.ParkingSlot.SlotNumber, hourlyRate);
         }
 
+        // A single SQL-translated projection shared by both list queries below — EF Core
+        // pushes this straight into the SELECT clause (with an implicit join for the
+        // ParkingSlot fields), so only the columns actually needed cross the wire, and
+        // nothing is tracked. No .Include() needed: that's only for materializing full
+        // related entities, not for projecting a few of their columns.
+        private static readonly System.Linq.Expressions.Expression<Func<VehicleBooking, BookingDto>> ProjectToDto =
+            b => new BookingDto
+            {
+                Id = b.Id,
+                VehicleNumber = b.VehicleNumber,
+                ParkingSlotId = b.ParkingSlotId,
+                SlotNumber = b.ParkingSlot!.SlotNumber,
+                HourlyRate = b.ParkingSlot!.HourlyRate,
+                EntryTime = b.EntryTime,
+                ExitTime = b.ExitTime,
+                TotalFee = b.TotalFee,
+                PenaltyFee = b.PenaltyFee,
+                Status = b.Status.ToString()
+            };
+
         public async Task<List<BookingDto>> GetMyBookingsAsync(int driverId)
         {
-            var bookings = await _context.VehicleBookings
-                .Include(b => b.ParkingSlot)
+            return await _context.VehicleBookings
                 .Where(b => b.UserId == driverId)
                 .OrderByDescending(b => b.EntryTime)
+                .Select(ProjectToDto)
                 .ToListAsync();
-
-            return bookings.Select(b => ToDto(b, b.ParkingSlot!.SlotNumber, b.ParkingSlot!.HourlyRate)).ToList();
         }
 
         public async Task<List<BookingDto>> GetBookingsForLotAsync(int lotId, int requestingUserId, bool isAdmin)
@@ -127,13 +137,11 @@ namespace ParkEase.Api.Services
             if (lot == null) return new List<BookingDto>();
             if (!isAdmin && lot.OperatorId != requestingUserId) return new List<BookingDto>();
 
-            var bookings = await _context.VehicleBookings
-                .Include(b => b.ParkingSlot)
+            return await _context.VehicleBookings
                 .Where(b => b.ParkingSlot!.ParkingLotId == lotId)
                 .OrderByDescending(b => b.EntryTime)
+                .Select(ProjectToDto)
                 .ToListAsync();
-
-            return bookings.Select(b => ToDto(b, b.ParkingSlot!.SlotNumber, b.ParkingSlot!.HourlyRate)).ToList();
         }
 
         // hourlyRate is passed explicitly rather than read from b.ParkingSlot — that
@@ -146,8 +154,8 @@ namespace ParkEase.Api.Services
             ParkingSlotId = b.ParkingSlotId,
             SlotNumber = slotNumber,
             HourlyRate = hourlyRate,
-            EntryTime = AsUtc(b.EntryTime),
-            ExitTime = AsUtc(b.ExitTime),
+            EntryTime = b.EntryTime,
+            ExitTime = b.ExitTime,
             TotalFee = b.TotalFee,
             PenaltyFee = b.PenaltyFee,
             Status = b.Status.ToString()

@@ -1,11 +1,13 @@
 import { useEffect } from "react";
 import type {
+  AnchorHTMLAttributes,
   ButtonHTMLAttributes,
   InputHTMLAttributes,
   LabelHTMLAttributes,
   ReactNode,
   SelectHTMLAttributes,
 } from "react";
+import { Link } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 
 export function PageContainer({ children }: { children: ReactNode }) {
@@ -82,7 +84,10 @@ export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
   );
 }
 
-const buttonVariants: Record<string, string> = {
+// Exported so pages that need a custom-sized element in this exact color treatment
+// (e.g. LandingPage's differently-sized hero CTAs) can compose it directly instead of
+// re-typing the brand colors by hand — re-theming only ever touches this one object.
+export const buttonVariants: Record<string, string> = {
   primary:
     "bg-indigo-600 text-white shadow-sm hover:bg-indigo-500 disabled:bg-indigo-300 focus-visible:ring-2 focus-visible:ring-indigo-500/40",
   secondary:
@@ -115,6 +120,33 @@ export function Button({
       {loading ? <Loader2 size={15} className="animate-spin" /> : icon}
       {children}
     </button>
+  );
+}
+
+// A react-router Link styled identically to Button — Button itself can't render as a
+// Link (it's a <button>), so this shares buttonVariants instead of pages hand-rolling
+// the same classes wherever a styled navigation link is needed.
+export function LinkButton({
+  to,
+  variant = "primary",
+  className = "",
+  icon,
+  children,
+  ...props
+}: Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "href"> & {
+  to: string;
+  variant?: "primary" | "secondary" | "danger" | "ghost";
+  icon?: ReactNode;
+}) {
+  return (
+    <Link
+      to={to}
+      {...props}
+      className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-sm font-medium transition-all duration-150 outline-none active:scale-[0.98] ${buttonVariants[variant]} ${className}`}
+    >
+      {icon}
+      {children}
+    </Link>
   );
 }
 

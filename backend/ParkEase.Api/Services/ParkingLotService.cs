@@ -14,6 +14,20 @@ namespace ParkEase.Api.Services
             _context = context;
         }
 
+        // Single SQL-translated projection shared by every read path below, so
+        // ParkingLotDto's shape only ever needs to be updated in one place — previously
+        // GetLotsAsync and GetAllLotsForBrowsingAsync each hand-rolled an identical copy.
+        private static readonly System.Linq.Expressions.Expression<Func<ParkingLot, ParkingLotDto>> ProjectToDto =
+            l => new ParkingLotDto
+            {
+                Id = l.Id,
+                Name = l.Name,
+                Address = l.Address,
+                OperatorId = l.OperatorId,
+                TotalSlots = l.Slots.Count,
+                AvailableSlots = l.Slots.Count(s => s.Status == SlotStatus.Available)
+            };
+
         public async Task<List<ParkingLotDto>> GetLotsAsync(int requestingUserId, bool isAdmin)
         {
             // Admins see every lot. Operators see ONLY lots where they are the OperatorId.
@@ -25,49 +39,30 @@ namespace ParkEase.Api.Services
                 query = query.Where(l => l.OperatorId == requestingUserId);
             }
 
-            return await query.Select(l => new ParkingLotDto
-            {
-                Id = l.Id,
-                Name = l.Name,
-                Address = l.Address,
-                OperatorId = l.OperatorId,
-                TotalSlots = l.Slots.Count,
-                AvailableSlots = l.Slots.Count(s => s.Status == SlotStatus.Available)
-            }).ToListAsync();
+            return await query.Select(ProjectToDto).ToListAsync();
         }
 
+        // Unfiltered, read-only listing for Drivers to discover lots to park in — deliberately
+        // separate from GetLotsAsync, which is ownership-scoped for the Operator/Admin management
+        // dashboards. Every lot is fair game to search when you're looking for a place to park.
         public async Task<List<ParkingLotDto>> GetAllLotsForBrowsingAsync()
         {
-            return await _context.ParkingLots.Select(l => new ParkingLotDto
-            {
-                Id = l.Id,
-                Name = l.Name,
-                Address = l.Address,
-                OperatorId = l.OperatorId,
-                TotalSlots = l.Slots.Count,
-                AvailableSlots = l.Slots.Count(s => s.Status == SlotStatus.Available)
-            }).ToListAsync();
+            return await _context.ParkingLots.Select(ProjectToDto).ToListAsync();
         }
 
         public async Task<ParkingLotDto?> GetLotByIdAsync(int lotId, int requestingUserId, bool isAdmin)
         {
-            var lot = await _context.ParkingLots.Include(l => l.Slots)
-                .FirstOrDefaultAsync(l => l.Id == lotId);
+            var lot = await _context.ParkingLots
+                .Where(l => l.Id == lotId)
+                .Select(ProjectToDto)
+                .FirstOrDefaultAsync();
 
             if (lot == null) return null;
 
             // Even with the direct ID, an Operator can't read a lot they don't own.
             if (!isAdmin && lot.OperatorId != requestingUserId) return null;
 
-            return new ParkingLotDto
-            {
-                Id = lot.Id,
-                Name = lot.Name,
-                Address = lot.Address,
-                OperatorId = lot.OperatorId,
-                TotalSlots = lot.Slots.Count,
-                AvailableSlots = lot.Slots.Count(s => s.Status == SlotStatus.Available)
-            };
+            return lot;
         }
 
         public async Task<ParkingLotDto> CreateLotAsync(CreateParkingLotDto dto, int operatorId)

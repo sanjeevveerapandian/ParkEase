@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using ParkEase.Api.Authorization;
 using ParkEase.Api.DTOs;
 using ParkEase.Api.Services;
 
@@ -47,7 +48,7 @@ namespace ParkEase.Api.Controllers
         /// <response code="201">Booking created — slot marked Occupied.</response>
         /// <response code="400">Slot not found, or not currently available.</response>
         [HttpPost]
-        [Authorize(Roles = "Driver")]
+        [Authorize(Policy = AuthPolicies.DriverOnly)]
         [ProducesResponseType(typeof(BookingDto), 201)]
         [ProducesResponseType(400)]
         public async Task<IActionResult> CreateBooking([FromBody] CreateBookingDto dto)
@@ -64,6 +65,7 @@ namespace ParkEase.Api.Controllers
         /// <response code="200">Booking closed — returns the final fee breakdown.</response>
         /// <response code="404">Booking not found, already closed, or not owned by the caller.</response>
         [HttpPost("{id}/exit")]
+        [Authorize(Policy = AuthPolicies.AnyAuthenticatedUser)]
         [ProducesResponseType(typeof(BookingDto), 200)]
         [ProducesResponseType(404)]
         public async Task<IActionResult> ExitBooking(int id)
@@ -77,7 +79,7 @@ namespace ParkEase.Api.Controllers
         /// Returns the calling driver's own booking history, most recent first.
         /// </summary>
         [HttpGet("mine")]
-        [Authorize(Roles = "Driver")]
+        [Authorize(Policy = AuthPolicies.DriverOnly)]
         [ProducesResponseType(typeof(List<BookingDto>), 200)]
         public async Task<IActionResult> GetMyBookings()
         {
@@ -90,7 +92,7 @@ namespace ParkEase.Api.Controllers
         /// only see bookings for lots they own.
         /// </summary>
         [HttpGet("lot/{lotId}")]
-        [Authorize(Roles = "Operator,Admin")]
+        [Authorize(Policy = AuthPolicies.OperatorOrAdmin)]
         [ProducesResponseType(typeof(List<BookingDto>), 200)]
         public async Task<IActionResult> GetBookingsForLot(int lotId)
         {

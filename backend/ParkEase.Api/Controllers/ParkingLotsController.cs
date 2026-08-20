@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using ParkEase.Api.Authorization;
 using ParkEase.Api.DTOs;
 using ParkEase.Api.Services;
 
@@ -28,7 +29,7 @@ namespace ParkEase.Api.Controllers
         /// Lists parking lots. Admins see every lot; Operators see only lots they own.
         /// </summary>
         [HttpGet]
-        [Authorize(Roles = "Admin,Operator")]
+        [Authorize(Policy = AuthPolicies.OperatorOrAdmin)]
         [ProducesResponseType(typeof(List<ParkingLotDto>), 200)]
         public async Task<IActionResult> GetLots()
         {
@@ -42,6 +43,7 @@ namespace ParkEase.Api.Controllers
         /// backs the Operator/Admin management dashboards instead.
         /// </summary>
         [HttpGet("browse")]
+        [Authorize(Policy = AuthPolicies.AnyAuthenticatedUser)]
         [ProducesResponseType(typeof(List<ParkingLotDto>), 200)]
         public async Task<IActionResult> BrowseLots()
         {
@@ -55,7 +57,7 @@ namespace ParkEase.Api.Controllers
         /// <response code="200">Lot found and accessible to the caller.</response>
         /// <response code="404">Lot not found, or not owned by the caller.</response>
         [HttpGet("{id}")]
-        [Authorize(Roles = "Admin,Operator")]
+        [Authorize(Policy = AuthPolicies.OperatorOrAdmin)]
         [ProducesResponseType(typeof(ParkingLotDto), 200)]
         [ProducesResponseType(404)]
         public async Task<IActionResult> GetLot(int id)
@@ -83,7 +85,7 @@ namespace ParkEase.Api.Controllers
         /// </remarks>
         /// <response code="201">Lot created.</response>
         [HttpPost]
-        [Authorize(Roles = "Operator,Admin")]
+        [Authorize(Policy = AuthPolicies.OperatorOrAdmin)]
         [ProducesResponseType(typeof(ParkingLotDto), 201)]
         public async Task<IActionResult> CreateLot([FromBody] CreateParkingLotDto dto)
         {
@@ -97,7 +99,7 @@ namespace ParkEase.Api.Controllers
         /// <response code="204">Lot deleted.</response>
         /// <response code="404">Lot not found, or not owned by the caller.</response>
         [HttpDelete("{id}")]
-        [Authorize(Roles = "Admin,Operator")]
+        [Authorize(Policy = AuthPolicies.OperatorOrAdmin)]
         [ProducesResponseType(204)]
         [ProducesResponseType(404)]
         public async Task<IActionResult> DeleteLot(int id)
@@ -113,6 +115,7 @@ namespace ParkEase.Api.Controllers
         /// like the management endpoints above.
         /// </summary>
         [HttpGet("{id}/slots")]
+        [Authorize(Policy = AuthPolicies.AnyAuthenticatedUser)]
         [ProducesResponseType(typeof(List<ParkingSlotDto>), 200)]
         public async Task<IActionResult> GetSlots(int id)
         {
@@ -135,7 +138,7 @@ namespace ParkEase.Api.Controllers
         /// <response code="201">Slot created, status defaults to Available.</response>
         /// <response code="403">Lot not owned by the calling Operator.</response>
         [HttpPost("{id}/slots")]
-        [Authorize(Roles = "Operator,Admin")]
+        [Authorize(Policy = AuthPolicies.OperatorOrAdmin)]
         [ProducesResponseType(typeof(ParkingSlotDto), 201)]
         [ProducesResponseType(403)]
         public async Task<IActionResult> CreateSlot(int id, [FromBody] CreateParkingSlotDto dto)

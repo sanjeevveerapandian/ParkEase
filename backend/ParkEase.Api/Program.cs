@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
+using ParkEase.Api.Authorization;
 using ParkEase.Api.Data;
 using ParkEase.Api.Services;
 
@@ -43,7 +44,14 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-builder.Services.AddAuthorization();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy(AuthPolicies.DriverOnly, p => p.RequireRole("Driver"));
+    options.AddPolicy(AuthPolicies.OperatorOnly, p => p.RequireRole("Operator"));
+    options.AddPolicy(AuthPolicies.AdminOnly, p => p.RequireRole("Admin"));
+    options.AddPolicy(AuthPolicies.OperatorOrAdmin, p => p.RequireRole("Operator", "Admin"));
+    options.AddPolicy(AuthPolicies.AnyAuthenticatedUser, p => p.RequireAuthenticatedUser());
+});
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
