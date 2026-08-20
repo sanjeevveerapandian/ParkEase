@@ -19,11 +19,18 @@ namespace ParkEase.Api.Services
             _context = context;
         }
 
+        // Stored times are always UTC (DateTime.UtcNow at write time). Emails go to Indian
+        // drivers, so render in IST rather than raw UTC — a fixed +5:30 offset rather than
+        // a TimeZoneInfo lookup, since IST has no DST and Windows/Linux use different zone
+        // ID formats ("India Standard Time" vs "Asia/Kolkata") that would break portability.
+        private static string FormatIst(DateTime utc) =>
+            $"{utc.AddHours(5.5):dd MMM yyyy, hh:mm tt} IST";
+
         public async Task SendBookingConfirmationAsync(VehicleBooking booking, string recipientEmail)
         {
             var subject = "ParkEase — Booking Confirmed";
             var body = $"<p>Your vehicle <strong>{booking.VehicleNumber}</strong> has been checked in at " +
-                       $"{booking.EntryTime:dd MMM yyyy, hh:mm tt} UTC.</p>";
+                       $"{FormatIst(booking.EntryTime)}.</p>";
 
             bool sent = await SendAsync(recipientEmail, subject, body);
             await LogNotificationAsync(booking.Id, NotificationType.BookingConfirmation, recipientEmail, sent);
@@ -33,7 +40,7 @@ namespace ParkEase.Api.Services
         {
             var subject = "ParkEase — Exit Receipt";
             var body = $"<p>Vehicle <strong>{booking.VehicleNumber}</strong> exited at " +
-                       $"{booking.ExitTime:dd MMM yyyy, hh:mm tt} UTC.</p>" +
+                       $"{FormatIst(booking.ExitTime!.Value)}.</p>" +
                        $"<p>Total Fee: ₹{booking.TotalFee}<br/>" +
                        (booking.PenaltyFee > 0 ? $"Overstay Penalty: ₹{booking.PenaltyFee}<br/>" : "") +
                        $"</p>";

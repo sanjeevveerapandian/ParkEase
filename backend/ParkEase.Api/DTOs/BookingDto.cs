@@ -6,6 +6,7 @@ namespace ParkEase.Api.DTOs
         public string VehicleNumber { get; set; } = string.Empty;
         public int ParkingSlotId { get; set; }
         public string SlotNumber { get; set; } = string.Empty;
+        public decimal HourlyRate { get; set; }
         public DateTime EntryTime { get; set; }
         public DateTime? ExitTime { get; set; }
         public decimal? TotalFee { get; set; }

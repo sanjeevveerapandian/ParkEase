@@ -20,6 +20,14 @@ namespace ParkEase.Api.Services
             _notificationService = notificationService;
         }
 
+        // SQL Server's datetime2 columns carry no timezone info, so EF Core reads every
+        // DateTime back with Kind=Unspecified even though we always write DateTime.UtcNow.
+        // System.Text.Json then serializes it WITHOUT a "Z"/offset, and JS's Date parser
+        // treats a timezone-less ISO string as local time — silently shifting every
+        // timestamp by the client's UTC offset. Re-tag as Utc before it leaves this layer.
+        private static DateTime AsUtc(DateTime dt) => DateTime.SpecifyKind(dt, DateTimeKind.Utc);
+        private static DateTime? AsUtc(DateTime? dt) => dt.HasValue ? DateTime.SpecifyKind(dt.Value, DateTimeKind.Utc) : null;
+
         public async Task<BookingDto?> CreateBookingAsync(CreateBookingDto dto, int driverId)
         {
             var slot = await _context.ParkingSlots.FindAsync(dto.ParkingSlotId);
@@ -45,10 +53,10 @@ namespace ParkEase.Api.Services
                 await _notificationService.SendBookingConfirmationAsync(booking, driver.Email);
             }
 
-            return ToDto(booking, slot.SlotNumber);
+            return ToDto(booking, slot.SlotNumber, slot.HourlyRate);
         }
 
-        public async Task<BookingDto?> ExitBookingAsync(int bookingId, int requestingUserId, bool isAdmin)
+        public async Task<BookingDto?> ExitBookingAsync(int bookingId, int requestingUserId, bool canExitAnyBooking)
         {
             var booking = await _context.VehicleBookings
                 .Include(b => b.ParkingSlot)
@@ -59,7 +67,7 @@ namespace ParkEase.Api.Services
 
             // A driver can only exit their OWN booking; Admin/Operator can exit any
             // (e.g. an operator manually closing out a booking at the barrier).
-            if (!isAdmin && booking.UserId != requestingUserId) return null;
+            if (!canExitAnyBooking && booking.UserId != requestingUserId) return null;
 
             booking.ExitTime = DateTime.UtcNow;
             var duration = booking.ExitTime.Value - booking.EntryTime;
@@ -99,27 +107,18 @@ namespace ParkEase.Api.Services
                 await _notificationService.SendExitReceiptAsync(booking, driverUser.Email);
             }
 
-            return ToDto(booking, booking.ParkingSlot.SlotNumber);
+            return ToDto(booking, booking.ParkingSlot.SlotNumber, hourlyRate);
         }
 
         public async Task<List<BookingDto>> GetMyBookingsAsync(int driverId)
         {
-            return await _context.VehicleBookings
+            var bookings = await _context.VehicleBookings
                 .Include(b => b.ParkingSlot)
                 .Where(b => b.UserId == driverId)
                 .OrderByDescending(b => b.EntryTime)
-                .Select(b => new BookingDto
-                {
-                    Id = b.Id,
-                    VehicleNumber = b.VehicleNumber,
-                    ParkingSlotId = b.ParkingSlotId,
-                    SlotNumber = b.ParkingSlot!.SlotNumber,
-                    EntryTime = b.EntryTime,
-                    ExitTime = b.ExitTime,
-                    TotalFee = b.TotalFee,
-                    PenaltyFee = b.PenaltyFee,
-                    Status = b.Status.ToString()
-                }).ToListAsync();
+                .ToListAsync();
+
+            return bookings.Select(b => ToDto(b, b.ParkingSlot!.SlotNumber, b.ParkingSlot!.HourlyRate)).ToList();
         }
 
         public async Task<List<BookingDto>> GetBookingsForLotAsync(int lotId, int requestingUserId, bool isAdmin)
@@ -128,32 +127,27 @@ namespace ParkEase.Api.Services
             if (lot == null) return new List<BookingDto>();
             if (!isAdmin && lot.OperatorId != requestingUserId) return new List<BookingDto>();
 
-            return await _context.VehicleBookings
+            var bookings = await _context.VehicleBookings
                 .Include(b => b.ParkingSlot)
                 .Where(b => b.ParkingSlot!.ParkingLotId == lotId)
                 .OrderByDescending(b => b.EntryTime)
-                .Select(b => new BookingDto
-                {
-                    Id = b.Id,
-                    VehicleNumber = b.VehicleNumber,
-                    ParkingSlotId = b.ParkingSlotId,
-                    SlotNumber = b.ParkingSlot!.SlotNumber,
-                    EntryTime = b.EntryTime,
-                    ExitTime = b.ExitTime,
-                    TotalFee = b.TotalFee,
-                    PenaltyFee = b.PenaltyFee,
-                    Status = b.Status.ToString()
-                }).ToListAsync();
+                .ToListAsync();
+
+            return bookings.Select(b => ToDto(b, b.ParkingSlot!.SlotNumber, b.ParkingSlot!.HourlyRate)).ToList();
         }
 
-        private static BookingDto ToDto(VehicleBooking b, string slotNumber) => new()
+        // hourlyRate is passed explicitly rather than read from b.ParkingSlot — that
+        // navigation isn't loaded on the CreateBookingAsync path (a freshly-tracked
+        // entity with only ParkingSlotId set), so reading it there would NRE.
+        private static BookingDto ToDto(VehicleBooking b, string slotNumber, decimal hourlyRate) => new()
         {
             Id = b.Id,
             VehicleNumber = b.VehicleNumber,
             ParkingSlotId = b.ParkingSlotId,
             SlotNumber = slotNumber,
-            EntryTime = b.EntryTime,
-            ExitTime = b.ExitTime,
+            HourlyRate = hourlyRate,
+            EntryTime = AsUtc(b.EntryTime),
+            ExitTime = AsUtc(b.ExitTime),
             TotalFee = b.TotalFee,
             PenaltyFee = b.PenaltyFee,
             Status = b.Status.ToString()

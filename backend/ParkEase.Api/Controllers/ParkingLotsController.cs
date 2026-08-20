@@ -8,7 +8,7 @@ namespace ParkEase.Api.Controllers
 {
     [ApiController]
     [Route("api/parkinglots")]
-    [Authorize(Roles = "Admin,Operator")]
+    [Authorize]
     public class ParkingLotsController : ControllerBase
     {
         private readonly IParkingLotService _service;
@@ -28,10 +28,24 @@ namespace ParkEase.Api.Controllers
         /// Lists parking lots. Admins see every lot; Operators see only lots they own.
         /// </summary>
         [HttpGet]
+        [Authorize(Roles = "Admin,Operator")]
         [ProducesResponseType(typeof(List<ParkingLotDto>), 200)]
         public async Task<IActionResult> GetLots()
         {
             var lots = await _service.GetLotsAsync(GetUserId(), IsAdmin());
+            return Ok(lots);
+        }
+
+        /// <summary>
+        /// Lists every parking lot, unfiltered — the driver-facing "browse lots to park in" read.
+        /// Open to any authenticated role. Not ownership-scoped like <see cref="GetLots"/>, which
+        /// backs the Operator/Admin management dashboards instead.
+        /// </summary>
+        [HttpGet("browse")]
+        [ProducesResponseType(typeof(List<ParkingLotDto>), 200)]
+        public async Task<IActionResult> BrowseLots()
+        {
+            var lots = await _service.GetAllLotsForBrowsingAsync();
             return Ok(lots);
         }
 
@@ -41,6 +55,7 @@ namespace ParkEase.Api.Controllers
         /// <response code="200">Lot found and accessible to the caller.</response>
         /// <response code="404">Lot not found, or not owned by the caller.</response>
         [HttpGet("{id}")]
+        [Authorize(Roles = "Admin,Operator")]
         [ProducesResponseType(typeof(ParkingLotDto), 200)]
         [ProducesResponseType(404)]
         public async Task<IActionResult> GetLot(int id)
@@ -51,7 +66,7 @@ namespace ParkEase.Api.Controllers
         }
 
         /// <summary>
-        /// Creates a new parking lot, owned by the calling Operator. Operator-only.
+        /// Creates a new parking lot. Operator or Admin.
         /// </summary>
         /// <remarks>
         /// Sample request:
@@ -62,11 +77,13 @@ namespace ParkEase.Api.Controllers
         ///        "address": "12 2nd Ave, Anna Nagar, Chennai"
         ///     }
         ///
-        /// The owning Operator is taken from the JWT token, not the request body.
+        /// The owning user (Operator or Admin) is taken from the JWT token, not the request body.
+        /// An Admin who creates a lot becomes its OperatorId, same as an Operator would — Admins
+        /// already see every lot regardless of ownership, so this doesn't change their visibility.
         /// </remarks>
         /// <response code="201">Lot created.</response>
         [HttpPost]
-        [Authorize(Roles = "Operator")]
+        [Authorize(Roles = "Operator,Admin")]
         [ProducesResponseType(typeof(ParkingLotDto), 201)]
         public async Task<IActionResult> CreateLot([FromBody] CreateParkingLotDto dto)
         {
@@ -80,6 +97,7 @@ namespace ParkEase.Api.Controllers
         /// <response code="204">Lot deleted.</response>
         /// <response code="404">Lot not found, or not owned by the caller.</response>
         [HttpDelete("{id}")]
+        [Authorize(Roles = "Admin,Operator")]
         [ProducesResponseType(204)]
         [ProducesResponseType(404)]
         public async Task<IActionResult> DeleteLot(int id)
@@ -95,7 +113,6 @@ namespace ParkEase.Api.Controllers
         /// like the management endpoints above.
         /// </summary>
         [HttpGet("{id}/slots")]
-        [Authorize]
         [ProducesResponseType(typeof(List<ParkingSlotDto>), 200)]
         public async Task<IActionResult> GetSlots(int id)
         {

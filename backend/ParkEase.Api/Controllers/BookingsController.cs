@@ -24,6 +24,11 @@ namespace ParkEase.Api.Controllers
 
         private bool IsAdmin() => User.IsInRole("Admin");
 
+        // Operators can manually close out any booking at their lot (e.g. at the barrier),
+        // same as Admins — distinct from IsAdmin(), which is used elsewhere for lot
+        // ownership scoping where Operators are still restricted to their own lots.
+        private bool IsOperatorOrAdmin() => User.IsInRole("Operator") || User.IsInRole("Admin");
+
         /// <summary>
         /// Books a vehicle into an available parking slot. Driver-only.
         /// </summary>
@@ -63,7 +68,7 @@ namespace ParkEase.Api.Controllers
         [ProducesResponseType(404)]
         public async Task<IActionResult> ExitBooking(int id)
         {
-            var booking = await _service.ExitBookingAsync(id, GetUserId(), IsAdmin());
+            var booking = await _service.ExitBookingAsync(id, GetUserId(), IsOperatorOrAdmin());
             if (booking == null) return NotFound(new { message = "Booking not found, already closed, or not yours." });
             return Ok(booking);
         }

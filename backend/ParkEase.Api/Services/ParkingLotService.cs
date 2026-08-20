@@ -36,6 +36,19 @@ namespace ParkEase.Api.Services
             }).ToListAsync();
         }
 
+        public async Task<List<ParkingLotDto>> GetAllLotsForBrowsingAsync()
+        {
+            return await _context.ParkingLots.Select(l => new ParkingLotDto
+            {
+                Id = l.Id,
+                Name = l.Name,
+                Address = l.Address,
+                OperatorId = l.OperatorId,
+                TotalSlots = l.Slots.Count,
+                AvailableSlots = l.Slots.Count(s => s.Status == SlotStatus.Available)
+            }).ToListAsync();
+        }
+
         public async Task<ParkingLotDto?> GetLotByIdAsync(int lotId, int requestingUserId, bool isAdmin)
         {
             var lot = await _context.ParkingLots.Include(l => l.Slots)
