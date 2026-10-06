@@ -9,6 +9,8 @@ import AccessDeniedPage from "./pages/AccessDeniedPage";
 import BrowseLotsPage from "./pages/driver/BrowseLotsPage";
 import LotSlotsPage from "./pages/driver/LotSlotsPage";
 import MyBookingsPage from "./pages/driver/MyBookingsPage";
+import MyVehiclesPage from "./pages/driver/MyVehiclesPage";
+import NotificationsPage from "./pages/driver/NotificationsPage";
 import LotsPage from "./pages/operator/LotsPage";
 import LotDetailPage from "./pages/operator/LotDetailPage";
 import ReportsPage from "./pages/admin/ReportsPage";
@@ -52,6 +54,23 @@ export default function App() {
           element={
             <RequireRole allowedRoles={["Driver"]}>
               <MyBookingsPage />
+            </RequireRole>
+          }
+        />
+
+        <Route
+          path="/driver/vehicles"
+          element={
+            <RequireRole allowedRoles={["Driver"]}>
+              <MyVehiclesPage />
+            </RequireRole>
+          }
+        />
+        <Route
+          path="/driver/notifications"
+          element={
+            <RequireRole allowedRoles={["Driver"]}>
+              <NotificationsPage />
             </RequireRole>
           }
         />

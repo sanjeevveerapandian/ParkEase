@@ -1,7 +1,6 @@
 namespace ParkEase.Api.DTOs
 {
-    // What the client receives when reading a lot — includes computed slot counts,
-    // never the raw EF navigation properties (avoids circular JSON serialization issues).
+
     public class ParkingLotDto
     {
         public int Id { get; set; }

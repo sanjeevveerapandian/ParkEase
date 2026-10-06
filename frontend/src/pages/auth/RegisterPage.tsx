@@ -6,10 +6,11 @@ import { useAuth } from "../../context/AuthContext";
 import { getErrorMessage } from "../../api/errors";
 import AuthLayout from "../../components/AuthLayout";
 import { Button, ErrorMessage, Field, Select, TextInput } from "../../components/ui";
+import { isValidIndianMobile } from "../../lib/booking";
 import type { Role } from "../../types";
 
 function homePathForRole(role: Role) {
-  return role === "Driver" ? "/driver/slots" : "/operator/lots";
+  return role === "Driver" ? "/driver/lots" : "/operator/lots";
 }
 
 export default function RegisterPage() {
@@ -27,6 +28,10 @@ export default function RegisterPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError("");
+    if (!isValidIndianMobile(phoneNumber)) {
+      setError("Enter a valid mobile number, e.g. 9876543210. Booking alerts are sent to it by SMS.");
+      return;
+    }
     setSubmitting(true);
     try {
       const assignedRole = await register({ fullName, email, password, phoneNumber, role });
@@ -95,6 +100,7 @@ export default function RegisterPage() {
               className="pl-10"
             />
           </div>
+          <p className="mt-1 text-xs text-slate-400">We text booking confirmations and receipts to this number.</p>
         </Field>
         <Field label="Role" htmlFor="role">
           <Select id="role" value={role} onChange={(e) => setRole(e.target.value as Role)}>

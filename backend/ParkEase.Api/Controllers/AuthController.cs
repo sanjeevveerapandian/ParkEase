@@ -6,7 +6,7 @@ namespace ParkEase.Api.Controllers
 {
     [ApiController]
     [Route("api/auth")]
-    public class AuthController : ControllerBase
+    public class AuthController : ApiControllerBase
     {
         private readonly IAuthService _authService;
 
@@ -33,8 +33,8 @@ namespace ParkEase.Api.Controllers
         /// Role must be exactly one of: Driver, Operator, Admin.
         /// </remarks>
         /// <response code="201">User created successfully — returns the JWT token.</response>
-        /// <response code="400">Validation failed on the request body.</response>
-        /// <response code="409">Email already registered, or an invalid role was specified.</response>
+        /// <response code="400">Validation failed (e.g. invalid mobile number, short password, unknown role).</response>
+        /// <response code="409">An account with this email already exists.</response>
         [HttpPost("register")]
         [ProducesResponseType(typeof(AuthResponseDto), 201)]
         [ProducesResponseType(400)]
@@ -47,13 +47,9 @@ namespace ParkEase.Api.Controllers
             }
 
             var result = await _authService.RegisterAsync(dto);
+            if (!result.Succeeded) return ErrorResult(result);
 
-            if (result == null)
-            {
-                return Conflict(new { message = "Email already registered, or invalid role specified." });
-            }
-
-            return CreatedAtAction(nameof(Register), result);
+            return CreatedAtAction(nameof(Register), result.Value);
         }
 
         /// <summary>

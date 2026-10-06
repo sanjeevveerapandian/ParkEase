@@ -33,15 +33,34 @@ namespace ParkEase.Api.Migrations
                     b.Property<int>("Channel")
                         .HasColumnType("int");
 
-                    b.Property<bool>("IsSent")
-                        .HasColumnType("bit");
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("Error")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
 
                     b.Property<string>("Recipient")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(256)
+                        .HasColumnType("nvarchar(256)");
 
-                    b.Property<DateTime>("SentAt")
-                        .HasColumnType("datetime2");
+                    b.Property<int>("Status")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Subject")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
 
                     b.Property<int>("Type")
                         .HasColumnType("int");
@@ -51,7 +70,7 @@ namespace ParkEase.Api.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("VehicleBookingId");
+                    b.HasIndex("VehicleBookingId", "Type");
 
                     b.ToTable("Notifications");
                 });
@@ -98,14 +117,19 @@ namespace ParkEase.Api.Migrations
 
                     b.Property<string>("SlotNumber")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
 
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
+                    b.Property<int>("VehicleType")
+                        .HasColumnType("int");
+
                     b.HasKey("Id");
 
-                    b.HasIndex("ParkingLotId");
+                    b.HasIndex("ParkingLotId", "SlotNumber")
+                        .IsUnique();
 
                     b.ToTable("ParkingSlots");
                 });
@@ -145,6 +169,39 @@ namespace ParkEase.Api.Migrations
                     b.ToTable("Users");
                 });
 
+            modelBuilder.Entity("ParkEase.Api.Models.Vehicle", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("OwnerId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("int");
+
+                    b.Property<string>("VehicleNumber")
+                        .IsRequired()
+                        .HasMaxLength(15)
+                        .HasColumnType("nvarchar(15)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OwnerId", "VehicleNumber")
+                        .IsUnique();
+
+                    b.ToTable("Vehicles");
+                });
+
             modelBuilder.Entity("ParkEase.Api.Models.VehicleBooking", b =>
                 {
                     b.Property<int>("Id")
@@ -153,7 +210,10 @@ namespace ParkEase.Api.Migrations
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
 
-                    b.Property<DateTime>("EntryTime")
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime?>("EntryTime")
                         .HasColumnType("datetime2");
 
                     b.Property<DateTime?>("ExitTime")
@@ -165,6 +225,12 @@ namespace ParkEase.Api.Migrations
                     b.Property<decimal?>("PenaltyFee")
                         .HasColumnType("decimal(10,2)");
 
+                    b.Property<DateTime?>("ReservationExpiresAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<DateTime>("ReservedAt")
+                        .HasColumnType("datetime2");
+
                     b.Property<int>("Status")
                         .HasColumnType("int");
 
@@ -174,15 +240,27 @@ namespace ParkEase.Api.Migrations
                     b.Property<int>("UserId")
                         .HasColumnType("int");
 
+                    b.Property<int>("VehicleId")
+                        .HasColumnType("int");
+
                     b.Property<string>("VehicleNumber")
                         .IsRequired()
-                        .HasColumnType("nvarchar(max)");
+                        .HasMaxLength(15)
+                        .HasColumnType("nvarchar(15)");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ParkingSlotId");
+                    b.HasIndex("ParkingSlotId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_VehicleBookings_OneLiveBookingPerSlot")
+                        .HasFilter("[Status] IN (0, 4)");
 
                     b.HasIndex("UserId");
+
+                    b.HasIndex("VehicleId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_VehicleBookings_OneLiveBookingPerVehicle")
+                        .HasFilter("[Status] IN (0, 4)");
 
                     b.ToTable("VehicleBookings");
                 });
@@ -220,6 +298,17 @@ namespace ParkEase.Api.Migrations
                     b.Navigation("ParkingLot");
                 });
 
+            modelBuilder.Entity("ParkEase.Api.Models.Vehicle", b =>
+                {
+                    b.HasOne("ParkEase.Api.Models.User", "Owner")
+                        .WithMany("Vehicles")
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Owner");
+                });
+
             modelBuilder.Entity("ParkEase.Api.Models.VehicleBooking", b =>
                 {
                     b.HasOne("ParkEase.Api.Models.ParkingSlot", "ParkingSlot")
@@ -234,9 +323,17 @@ namespace ParkEase.Api.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("ParkEase.Api.Models.Vehicle", "Vehicle")
+                        .WithMany("Bookings")
+                        .HasForeignKey("VehicleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.Navigation("ParkingSlot");
 
                     b.Navigation("User");
+
+                    b.Navigation("Vehicle");
                 });
 
             modelBuilder.Entity("ParkEase.Api.Models.ParkingLot", b =>
@@ -254,6 +351,13 @@ namespace ParkEase.Api.Migrations
                     b.Navigation("Bookings");
 
                     b.Navigation("ManagedLots");
+
+                    b.Navigation("Vehicles");
+                });
+
+            modelBuilder.Entity("ParkEase.Api.Models.Vehicle", b =>
+                {
+                    b.Navigation("Bookings");
                 });
 #pragma warning restore 612, 618
         }

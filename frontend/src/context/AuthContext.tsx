@@ -19,19 +19,23 @@ interface AuthContextValue extends AuthState {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-// Deliberately in-memory only (no localStorage) per spec: token/role/fullName
-// live in React state and are lost on a full page reload.
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<AuthState>({
-    token: null,
-    role: null,
-    fullName: null,
+  const [state, setState] = useState<AuthState>(() => {
+    const token = localStorage.getItem("token");
+    const role = localStorage.getItem("role") as Role | null;
+    const fullName = localStorage.getItem("fullName");
+    if (token) setAuthToken(token); // so the axios interceptor picks it up immediately
+    return { token, role, fullName };
   });
 
   const login = useCallback(async (data: LoginDto) => {
     const res = await authApi.login(data);
     const { token, role, fullName } = res.data;
     setAuthToken(token);
+    localStorage.setItem("token", token);
+    localStorage.setItem("role", role);
+    localStorage.setItem("fullName", fullName);
     setState({ token, role: role as Role, fullName });
     return role as Role;
   }, []);
@@ -40,12 +44,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const res = await authApi.register(data);
     const { token, role, fullName } = res.data;
     setAuthToken(token);
+    localStorage.setItem("token", token);
+    localStorage.setItem("role", role);
+    localStorage.setItem("fullName", fullName);
     setState({ token, role: role as Role, fullName });
     return role as Role;
   }, []);
 
   const logout = useCallback(() => {
     setAuthToken(null);
+    localStorage.removeItem("token");
+    localStorage.removeItem("role");
+    localStorage.removeItem("fullName");
     setState({ token: null, role: null, fullName: null });
   }, []);
 

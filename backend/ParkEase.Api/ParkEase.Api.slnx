@@ -1,3 +1,4 @@
 <Solution>
   <Project Path="ParkEase.Api.csproj" />
+  <Project Path="../ParkEase.Api.Tests/ParkEase.Api.Tests.csproj" />
 </Solution>

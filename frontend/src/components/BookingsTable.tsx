@@ -1,112 +1,141 @@
-import { useEffect, useState } from "react";
-import { LogOut as ExitIcon } from "lucide-react";
-import { Badge, Button } from "./ui";
+import { ArrowRight, LogIn, LogOut, X } from "lucide-react";
+import { Button } from "./ui";
+import { amountDue, BookingStatusBadge, HoldCountdown, LiveEstimate, VehicleIcon } from "./BookingParts";
+import { formatDateTime, rupees } from "../lib/booking";
 import type { BookingDto } from "../types";
 
-// Live elapsed-time + running-cost estimate for an Active booking. Uses the same
-// round-up-to-the-hour rule the backend bills with at exit, so the number here is
-// a genuine preview of the final fee, not just a decorative timer — it just can't
-// know the final minute until you actually exit.
-function LiveEstimate({ entryTime, hourlyRate }: { entryTime: string; hourlyRate: number }) {
-  const [now, setNow] = useState(() => Date.now());
+export type BookingAction = "checkIn" | "exit" | "cancel";
 
-  useEffect(() => {
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, []);
-
-  const elapsedMs = Math.max(0, now - new Date(entryTime).getTime());
-  const hours = Math.floor(elapsedMs / 3_600_000);
-  const minutes = Math.floor((elapsedMs % 3_600_000) / 60_000);
-  const billableHours = Math.max(1, Math.ceil(elapsedMs / 3_600_000));
-  const estimate = billableHours * hourlyRate;
-
-  return (
-    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-indigo-600">
-      <span className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-indigo-500" />
-      {hours}h {minutes}m · ~₹{estimate.toFixed(2)}
-    </span>
-  );
+export interface BookingActions {
+  onAction: (action: BookingAction, booking: BookingDto) => void;
+  busy: { id: number; action: BookingAction } | null;
 }
 
-// Shared bookings table for both the driver's "My Bookings" view and the operator's
-// per-lot bookings view — previously two near-identical hand-copies. "driver" adds the
-// Penalty column, the live running-cost estimate on Active rows, and the Exit action;
-// "operator" is the same base columns, read-only.
+function RowActions({ booking, actions }: { booking: BookingDto; actions: BookingActions }) {
+  const busy = (a: BookingAction) => actions.busy?.id === booking.id && actions.busy.action === a;
+  const anyBusy = actions.busy?.id === booking.id;
+
+  if (booking.status === "Reserved") {
+    return (
+      <div className="flex justify-end gap-2">
+        <Button
+          icon={<LogIn size={14} />}
+          loading={busy("checkIn")}
+          disabled={anyBusy}
+          onClick={() => actions.onAction("checkIn", booking)}
+        >
+          Check in
+        </Button>
+        <Button
+          variant="secondary"
+          icon={<X size={14} />}
+          loading={busy("cancel")}
+          disabled={anyBusy}
+          onClick={() => actions.onAction("cancel", booking)}
+        >
+          Cancel
+        </Button>
+      </div>
+    );
+  }
+  if (booking.status === "Active") {
+    return (
+      <div className="flex justify-end">
+        <Button
+          variant="danger"
+          icon={<LogOut size={14} />}
+          loading={busy("exit")}
+          disabled={anyBusy}
+          onClick={() => actions.onAction("exit", booking)}
+        >
+          Exit
+        </Button>
+      </div>
+    );
+  }
+  return null;
+}
+
+function Fee({ booking }: { booking: BookingDto }) {
+  const due = amountDue(booking);
+  if (due != null) {
+    return (
+      <span className="text-slate-800">
+        {rupees(due)}
+        {booking.penaltyFee != null && booking.penaltyFee > 0 && (
+          <span className="block text-xs text-rose-600">incl. {rupees(booking.penaltyFee)} overstay</span>
+        )}
+      </span>
+    );
+  }
+  if (booking.status === "Active" && booking.entryTime) {
+    return <LiveEstimate entryTime={booking.entryTime} hourlyRate={booking.hourlyRate} />;
+  }
+  if (booking.status === "Reserved") return <span className="whitespace-nowrap text-slate-400">Starts at check-in</span>;
+  return <span className="text-slate-400">—</span>;
+}
+
 export function BookingsTable({
   bookings,
-  variant,
-  onExit,
-  exitingId,
+  showLot = false,
+  showDriver = false,
+  actions,
 }: {
   bookings: BookingDto[];
-  variant: "driver" | "operator";
-  onExit?: (booking: BookingDto) => void;
-  exitingId?: number | null;
+  showLot?: boolean;
+  showDriver?: boolean;
+  actions?: BookingActions;
 }) {
-  const isDriver = variant === "driver";
-
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
         <thead>
           <tr className="border-b border-slate-200 bg-slate-50/80 text-xs uppercase tracking-wide text-slate-500">
-            <th className="px-6 py-3 font-medium">Slot</th>
-            <th className="px-6 py-3 font-medium">Vehicle</th>
-            <th className="px-6 py-3 font-medium">Entry</th>
-            <th className="px-6 py-3 font-medium">Exit</th>
+            <th className="px-6 py-3 font-medium">Vehicle → Slot</th>
+            {showDriver && <th className="px-6 py-3 font-medium">Driver</th>}
+            {showLot && <th className="px-6 py-3 font-medium">Lot</th>}
+            <th className="px-6 py-3 font-medium">Reserved</th>
+            <th className="px-6 py-3 font-medium">Checked in</th>
+            <th className="px-6 py-3 font-medium">Exited</th>
             <th className="px-6 py-3 font-medium">Fee</th>
-            {isDriver && <th className="px-6 py-3 font-medium">Penalty</th>}
             <th className="px-6 py-3 font-medium">Status</th>
-            {isDriver && <th className="px-6 py-3 font-medium"></th>}
+            {actions && <th className="px-6 py-3" />}
           </tr>
         </thead>
         <tbody>
           {bookings.map((b) => (
             <tr key={b.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/60">
-              <td className="px-6 py-3.5 font-medium text-slate-900">{b.slotNumber}</td>
-              <td className="px-6 py-3.5 text-slate-700">{b.vehicleNumber}</td>
-              <td className="px-6 py-3.5 whitespace-nowrap text-slate-700">
-                {new Date(b.entryTime).toLocaleString()}
+              <td className="px-6 py-3.5">
+                <span className="inline-flex items-center gap-2 whitespace-nowrap font-medium text-slate-900">
+                  <span className="text-slate-400">
+                    <VehicleIcon type={b.vehicleType} size={15} />
+                  </span>
+                  {b.vehicleNumber}
+                  <ArrowRight size={13} className="text-slate-300" />
+                  <span className="rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-xs">{b.slotNumber}</span>
+                </span>
               </td>
+              {showDriver && <td className="px-6 py-3.5 whitespace-nowrap text-slate-700">{b.driverName}</td>}
+              {showLot && <td className="px-6 py-3.5 whitespace-nowrap text-slate-700">{b.lotName}</td>}
               <td className="px-6 py-3.5 whitespace-nowrap text-slate-700">
-                {b.exitTime ? new Date(b.exitTime).toLocaleString() : "—"}
-              </td>
-              <td className="px-6 py-3.5 text-slate-700">
-                {b.totalFee != null ? (
-                  `₹${b.totalFee.toFixed(2)}`
-                ) : isDriver && b.status === "Active" ? (
-                  <LiveEstimate entryTime={b.entryTime} hourlyRate={b.hourlyRate} />
-                ) : (
-                  "—"
+                {formatDateTime(b.reservedAt)}
+                {b.status === "Reserved" && b.reservationExpiresAt && (
+                  <span className="block text-xs">
+                    <HoldCountdown expiresAt={b.reservationExpiresAt} />
+                  </span>
                 )}
               </td>
-              {isDriver && (
-                <td className="px-6 py-3.5 text-slate-700">
-                  {b.penaltyFee != null && b.penaltyFee > 0 ? (
-                    <span className="text-rose-600">₹{b.penaltyFee.toFixed(2)}</span>
-                  ) : (
-                    "—"
-                  )}
-                </td>
-              )}
+              <td className="px-6 py-3.5 whitespace-nowrap text-slate-700">{formatDateTime(b.entryTime)}</td>
+              <td className="px-6 py-3.5 whitespace-nowrap text-slate-700">{formatDateTime(b.exitTime)}</td>
               <td className="px-6 py-3.5">
-                <Badge tone={b.status === "Active" ? "green" : "slate"} dot>
-                  {b.status}
-                </Badge>
+                <Fee booking={b} />
               </td>
-              {isDriver && (
+              <td className="px-6 py-3.5">
+                <BookingStatusBadge status={b.status} />
+              </td>
+              {actions && (
                 <td className="px-6 py-3.5">
-                  {b.status === "Active" && onExit && (
-                    <Button
-                      variant="danger"
-                      icon={<ExitIcon size={14} />}
-                      loading={exitingId === b.id}
-                      onClick={() => onExit(b)}
-                    >
-                      {exitingId === b.id ? "Exiting…" : "Exit"}
-                    </Button>
-                  )}
+                  <RowActions booking={b} actions={actions} />
                 </td>
               )}
             </tr>

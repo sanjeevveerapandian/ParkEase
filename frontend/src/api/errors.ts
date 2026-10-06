@@ -1,11 +1,7 @@
 import axios from "axios";
 import type { ApiProblemDetails } from "../types";
 
-// Backend error bodies come in three shapes depending on the failure:
-//  - hand-rolled controller errors: { message: "..." }               (e.g. AuthController, BookingsController)
-//  - [ApiController] model validation: { errors: { field: [...] } }  (BadRequest(ModelState))
-//  - GlobalExceptionMiddleware on unhandled exceptions: { statusCode, message, correlationId }
-// Pull out the most useful human-readable string for display, in that order.
+
 export function getErrorMessage(err: unknown, fallback = "Something went wrong. Please try again."): string {
   if (axios.isAxiosError(err)) {
     const data = err.response?.data as (ApiProblemDetails & { message?: string; errors?: Record<string, string[]> }) | string | undefined;

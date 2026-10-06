@@ -5,21 +5,48 @@ using System.Text;
 using ParkEase.Api.Authorization;
 using ParkEase.Api.Data;
 using ParkEase.Api.Services;
+using ParkEase.Api.Services.Notifications;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
 
 builder.Services.AddControllers();
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.Configure<BookingOptions>(builder.Configuration.GetSection("Booking"));
+builder.Services.Configure<SmsOptions>(builder.Configuration.GetSection("Sms"));
+
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IParkingLotService, ParkingLotService>();
+builder.Services.AddScoped<IVehicleService, VehicleService>();
 builder.Services.AddScoped<IBookingService, BookingService>();
-builder.Services.AddHttpClient<INotificationService, EmailNotificationService>();
 builder.Services.AddScoped<IReportService, ReportService>();
+
+// One NotificationService instance serves both the dispatch and the driver-inbox interfaces.
+builder.Services.AddScoped<NotificationService>();
+builder.Services.AddScoped<INotificationService>(sp => sp.GetRequiredService<NotificationService>());
+builder.Services.AddScoped<INotificationInboxService>(sp => sp.GetRequiredService<NotificationService>());
+
+builder.Services.AddHttpClient<IEmailSender, BrevoEmailSender>();
+
+// SMS provider is chosen by config (Sms:Provider). Without gateway credentials the simulated
+// "Log" provider is used, so the flow works end to end and messages still show up in the app.
+var smsOptions = builder.Configuration.GetSection("Sms").Get<SmsOptions>() ?? new SmsOptions();
+if (smsOptions.Provider.Equals("Twilio", StringComparison.OrdinalIgnoreCase) && smsOptions.Twilio.IsConfigured)
+{
+    builder.Services.AddHttpClient<ISmsSender, TwilioSmsSender>();
+}
+else
+{
+    if (smsOptions.Provider.Equals("Twilio", StringComparison.OrdinalIgnoreCase))
+        Console.WriteLine("WARNING: Sms:Provider is 'Twilio' but Sms:Twilio credentials are incomplete — falling back to simulated SMS.");
+    builder.Services.AddSingleton<ISmsSender, LogSmsSender>();
+}
+
+builder.Services.AddHostedService<BookingMaintenanceWorker>();
 
 var jwtKey = builder.Configuration["Jwt:Key"]!;
 var jwtIssuer = builder.Configuration["Jwt:Issuer"]!;
@@ -53,7 +80,6 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy(AuthPolicies.AnyAuthenticatedUser, p => p.RequireAuthenticatedUser());
 });
 
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
@@ -104,7 +130,8 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("http://localhost:5173")
+        var origins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>();
+        policy.WithOrigins(origins is { Length: > 0 } ? origins : new[] { "http://localhost:5173" })
               .AllowAnyMethod()
               .AllowAnyHeader();
     });
@@ -123,31 +150,28 @@ if (app.Environment.IsDevelopment())
 
 app.UseCors("AllowFrontend");
 
-app.UseHttpsRedirection();
+
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
 
-// Seed a default Admin account on first run, so a fresh clone of this repo
-// always has a working Admin login for testing — satisfies "seeded roles/users".
+
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    if (!db.Users.Any(u => u.Role == ParkEase.Api.Models.UserRole.Admin))
-    {
-        db.Users.Add(new ParkEase.Api.Models.User
-        {
-            FullName = "System Admin",
-            Email = "admin@parkease.com",
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Admin@123"),
-            PhoneNumber = "9999999999",
-            Role = ParkEase.Api.Models.UserRole.Admin
-        });
-        db.SaveChanges();
-        Console.WriteLine("Seeded default Admin: admin@parkease.com / Admin@123");
-    }
+
+    // In Development the schema is brought up to date automatically, so a fresh clone (or a
+    // pulled schema change) just works. Elsewhere, run `dotnet ef database update` deliberately.
+    if (app.Environment.IsDevelopment())
+        db.Database.Migrate();
+
+    DbSeeder.Seed(db);
 }
 
 app.Run();

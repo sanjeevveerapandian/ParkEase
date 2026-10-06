@@ -4,10 +4,7 @@ import { ArrowLeft, MapPin } from "lucide-react";
 import { ErrorMessage, Skeleton, SkeletonGrid } from "./ui";
 import type { ParkingLotDto } from "../types";
 
-// Shared "back link + loading skeleton + lot name/address header" shell for the two
-// per-lot detail pages (driver's slot picker, operator's lot management) — previously
-// duplicated near-verbatim between them. Each page still owns its own body content,
-// passed as children, since that differs completely between the two.
+
 export function LotPageShell({
   backTo,
   lot,

@@ -1,5 +1,3 @@
-// Mirrors backend/ParkEase.Api/DTOs — property names are camelCase because
-// ASP.NET Core's default System.Text.Json serializer lowercases the first letter.
 
 export type Role = "Driver" | "Operator" | "Admin";
 
@@ -37,10 +35,17 @@ export interface CreateParkingLotDto {
   address: string;
 }
 
+export type VehicleType = "Car" | "Bike";
+
+export type SlotStatus = "Available" | "Reserved" | "Occupied" | "Maintenance";
+
+export type BookingStatus = "Reserved" | "Active" | "Completed" | "Overstayed" | "Cancelled" | "Expired";
+
 export interface ParkingSlotDto {
   id: number;
   slotNumber: string;
-  status: string; // "Available" | "Occupied" (backend enum serialized as string)
+  status: SlotStatus;
+  vehicleType: VehicleType;
   hourlyRate: number;
   parkingLotId: number;
 }
@@ -48,24 +53,62 @@ export interface ParkingSlotDto {
 export interface CreateParkingSlotDto {
   slotNumber: string;
   hourlyRate: number;
+  vehicleType: VehicleType;
+}
+
+export interface VehicleDto {
+  id: number;
+  vehicleNumber: string;
+  type: VehicleType;
+  createdAt: string;
+}
+
+export interface CreateVehicleDto {
+  vehicleNumber: string;
+  type: VehicleType;
 }
 
 export interface BookingDto {
   id: number;
+  status: BookingStatus;
+  vehicleId: number;
   vehicleNumber: string;
+  vehicleType: VehicleType;
+  driverName: string;
   parkingSlotId: number;
   slotNumber: string;
+  parkingLotId: number;
+  lotName: string;
   hourlyRate: number;
-  entryTime: string;
+  reservedAt: string;
+  reservationExpiresAt: string | null;
+  entryTime: string | null; // check-in: billing starts here
   exitTime: string | null;
+  cancelledAt: string | null; // cancelled or expired reservations
   totalFee: number | null;
   penaltyFee: number | null;
-  status: string; // "Active" | "Completed"
 }
 
 export interface CreateBookingDto {
+  vehicleId: number;
   parkingSlotId: number;
-  vehicleNumber: string;
+}
+
+export type NotificationChannel = "Sms" | "Email";
+export type NotificationStatus = "Sent" | "Simulated" | "Failed" | "Pending";
+
+export interface NotificationDto {
+  id: number;
+  bookingId: number;
+  type: string;
+  channel: NotificationChannel;
+  recipient: string;
+  subject: string | null;
+  message: string;
+  status: NotificationStatus;
+  provider: string;
+  error: string | null;
+  createdAt: string;
 }
 
 export interface LotUtilizationDto {
@@ -73,6 +116,7 @@ export interface LotUtilizationDto {
   lotName: string;
   totalSlots: number;
   occupiedSlots: number;
+  reservedSlots: number;
   occupancyRatePercent: number;
   revenue: number;
 }
@@ -81,6 +125,7 @@ export interface ReportOverviewDto {
   totalLots: number;
   totalSlots: number;
   occupiedSlots: number;
+  reservedSlots: number;
   availableSlots: number;
   overallOccupancyRatePercent: number;
   totalRevenue: number;
