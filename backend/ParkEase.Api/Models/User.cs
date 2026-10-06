@@ -19,5 +19,6 @@ namespace ParkEase.Api.Models
 
         public ICollection<ParkingLot> ManagedLots { get; set; } = new List<ParkingLot>();
         public ICollection<VehicleBooking> Bookings { get; set; } = new List<VehicleBooking>();
+        public ICollection<Vehicle> Vehicles { get; set; } = new List<Vehicle>();
     }
 }

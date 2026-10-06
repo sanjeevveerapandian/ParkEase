@@ -1,5 +1,5 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { LayoutGrid, LogOut, ParkingSquare, ReceiptText, BarChart3 } from "lucide-react";
+import { Bell, Car, LayoutGrid, LogOut, ParkingSquare, ReceiptText, BarChart3 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
 function NavLink({
@@ -61,8 +61,14 @@ export default function Navbar() {
                   <NavLink to="/driver/lots" active={location.pathname.startsWith("/driver/lots")} icon={<LayoutGrid size={15} />}>
                     Find Parking
                   </NavLink>
+                  <NavLink to="/driver/vehicles" active={location.pathname === "/driver/vehicles"} icon={<Car size={15} />}>
+                    Vehicles
+                  </NavLink>
                   <NavLink to="/driver/bookings" active={location.pathname === "/driver/bookings"} icon={<ReceiptText size={15} />}>
-                    My Bookings
+                    Bookings
+                  </NavLink>
+                  <NavLink to="/driver/notifications" active={location.pathname === "/driver/notifications"} icon={<Bell size={15} />}>
+                    Alerts
                   </NavLink>
                 </>
               )}

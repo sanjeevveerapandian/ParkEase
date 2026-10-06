@@ -84,9 +84,7 @@ export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
   );
 }
 
-// Exported so pages that need a custom-sized element in this exact color treatment
-// (e.g. LandingPage's differently-sized hero CTAs) can compose it directly instead of
-// re-typing the brand colors by hand — re-theming only ever touches this one object.
+
 export const buttonVariants: Record<string, string> = {
   primary:
     "bg-indigo-600 text-white shadow-sm hover:bg-indigo-500 disabled:bg-indigo-300 focus-visible:ring-2 focus-visible:ring-indigo-500/40",
@@ -123,9 +121,7 @@ export function Button({
   );
 }
 
-// A react-router Link styled identically to Button — Button itself can't render as a
-// Link (it's a <button>), so this shares buttonVariants instead of pages hand-rolling
-// the same classes wherever a styled navigation link is needed.
+
 export function LinkButton({
   to,
   variant = "primary",
@@ -265,7 +261,6 @@ export function StatCard({
   );
 }
 
-// Centered overlay dialog. Closes on backdrop click or Escape.
 export function Modal({
   open,
   onClose,

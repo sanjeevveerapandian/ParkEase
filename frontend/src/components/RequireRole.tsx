@@ -8,8 +8,7 @@ interface RequireRoleProps {
   children: ReactNode;
 }
 
-// Redirects to /login if not authenticated, or /access-denied if the
-// logged-in user's role isn't in allowedRoles.
+
 export default function RequireRole({ allowedRoles, children }: RequireRoleProps) {
   const { isAuthenticated, role } = useAuth();
 

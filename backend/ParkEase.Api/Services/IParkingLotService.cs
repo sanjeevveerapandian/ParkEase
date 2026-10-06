@@ -4,19 +4,18 @@ namespace ParkEase.Api.Services
 {
     public interface IParkingLotService
     {
-        // requestingUserId + isAdmin let the service enforce "operators only see their own lots"
-        // without the controller needing to know the business rule itself.
-        Task<List<ParkingLotDto>> GetLotsAsync(int requestingUserId, bool isAdmin);
+        // Management views: Admins see every lot, Operators only the lots they own.
+        Task<List<ParkingLotDto>> GetLotsAsync(Actor actor);
+        Task<ParkingLotDto?> GetLotByIdAsync(int lotId, Actor actor);
+        Task<ParkingLotDto> CreateLotAsync(CreateParkingLotDto dto, int ownerId);
+        Task<ServiceResult<bool>> DeleteLotAsync(int lotId, Actor actor);
 
-        // Unfiltered, read-only listing for Drivers to discover lots to park in — deliberately
-        // separate from GetLotsAsync, which is ownership-scoped for the Operator/Admin management
-        // dashboards. Every lot is fair game to search when you're looking for a place to park.
+        // Driver-facing: every lot, unfiltered, for finding somewhere to park.
         Task<List<ParkingLotDto>> GetAllLotsForBrowsingAsync();
-        Task<ParkingLotDto?> GetLotByIdAsync(int lotId, int requestingUserId, bool isAdmin);
-        Task<ParkingLotDto> CreateLotAsync(CreateParkingLotDto dto, int operatorId);
-        Task<bool> DeleteLotAsync(int lotId, int requestingUserId, bool isAdmin);
 
         Task<List<ParkingSlotDto>> GetSlotsForLotAsync(int lotId);
-        Task<ParkingSlotDto?> CreateSlotAsync(int lotId, CreateParkingSlotDto dto, int requestingUserId, bool isAdmin);
+        Task<ServiceResult<ParkingSlotDto>> CreateSlotAsync(int lotId, CreateParkingSlotDto dto, Actor actor);
+        Task<ServiceResult<ParkingSlotDto>> UpdateSlotStatusAsync(int lotId, int slotId, string status, Actor actor);
+        Task<ServiceResult<bool>> DeleteSlotAsync(int lotId, int slotId, Actor actor);
     }
 }

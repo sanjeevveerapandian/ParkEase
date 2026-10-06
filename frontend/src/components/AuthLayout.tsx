@@ -18,7 +18,7 @@ export default function AuthLayout({
 }) {
   return (
     <div className="grid min-h-screen grid-cols-1 lg:grid-cols-2">
-      {/* Branded panel — hidden on small screens to keep the form front and center */}
+     
       <div className="relative hidden flex-col justify-between overflow-hidden bg-gradient-to-br from-indigo-600 via-indigo-700 to-slate-900 p-12 text-white lg:flex">
         <div
           className="pointer-events-none absolute inset-0 opacity-[0.07]"

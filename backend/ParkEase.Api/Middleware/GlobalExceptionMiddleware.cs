@@ -3,9 +3,7 @@ using System.Text.Json;
 
 namespace ParkEase.Api.Middleware
 {
-    // Catches any unhandled exception anywhere in the request pipeline and converts it
-    // into a consistent JSON error shape instead of leaking a raw stack trace to the client.
-    // This directly satisfies the caselet's "Consistent API error response format" requirement.
+    
     public class GlobalExceptionMiddleware
     {
         private readonly RequestDelegate _next;

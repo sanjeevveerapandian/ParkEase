@@ -37,8 +37,8 @@ const features = [
 
 const steps = [
   { icon: Search, title: "Find a lot", description: "Search parking lots by name or address and check live availability." },
-  { icon: Car, title: "Book & park", description: "Reserve an open slot in seconds and park your vehicle." },
-  { icon: CreditCard, title: "Exit & pay", description: "Check out when you leave — your fee is calculated automatically." },
+  { icon: Car, title: "Reserve a slot", description: "Pick your vehicle and a matching slot. We hold it for 15 minutes and text you the details." },
+  { icon: CreditCard, title: "Check in, park, exit", description: "Billing starts when you check in and stops when you exit — fee and receipt arrive by SMS and email." },
 ];
 
 export default function LandingPage() {

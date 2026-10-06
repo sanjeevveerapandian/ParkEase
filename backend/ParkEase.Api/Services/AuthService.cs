@@ -7,6 +7,7 @@ using Microsoft.IdentityModel.Tokens;
 using ParkEase.Api.Data;
 using ParkEase.Api.DTOs;
 using ParkEase.Api.Models;
+using ParkEase.Api.Services.Notifications;
 
 namespace ParkEase.Api.Services
 {
@@ -21,32 +22,32 @@ namespace ParkEase.Api.Services
             _configuration = configuration;
         }
 
-        public async Task<AuthResponseDto?> RegisterAsync(RegisterDto dto)
+        public async Task<ServiceResult<AuthResponseDto>> RegisterAsync(RegisterDto dto)
         {
-            bool emailExists = await _context.Users.AnyAsync(u => u.Email == dto.Email);
-            if (emailExists)
-            {
-                return null;
-            }
+            var email = dto.Email.Trim();
+            if (await _context.Users.AnyAsync(u => u.Email == email))
+                return ServiceResult<AuthResponseDto>.Fail(ServiceErrorCode.Conflict, "An account with this email already exists.");
 
             if (!Enum.TryParse<UserRole>(dto.Role, true, out var parsedRole))
-            {
-                return null;
-            }
+                return ServiceResult<AuthResponseDto>.Fail(ServiceErrorCode.Validation, "Role must be Driver, Operator or Admin.");
+
+            // Stored in +E.164 form because SMS alerts are sent to this number.
+            if (!PhoneNumber.TryNormalize(dto.PhoneNumber, out var phone))
+                return ServiceResult<AuthResponseDto>.Fail(ServiceErrorCode.Validation, "Enter a valid mobile number, e.g. 9876543210.");
 
             var user = new User
             {
-                FullName = dto.FullName,
-                Email = dto.Email,
+                FullName = dto.FullName.Trim(),
+                Email = email,
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
-                PhoneNumber = dto.PhoneNumber,
+                PhoneNumber = phone,
                 Role = parsedRole
             };
 
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
 
-            return GenerateAuthResponse(user);
+            return ServiceResult<AuthResponseDto>.Ok(GenerateAuthResponse(user));
         }
 
         public async Task<AuthResponseDto?> LoginAsync(LoginDto dto)

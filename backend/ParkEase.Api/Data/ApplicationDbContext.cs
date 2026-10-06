@@ -12,6 +12,7 @@ namespace ParkEase.Api.Data
         }
 
         public DbSet<User> Users { get; set; }
+        public DbSet<Vehicle> Vehicles { get; set; }
         public DbSet<ParkingLot> ParkingLots { get; set; }
         public DbSet<ParkingSlot> ParkingSlots { get; set; }
         public DbSet<VehicleBooking> VehicleBookings { get; set; }
@@ -31,6 +32,11 @@ namespace ParkEase.Api.Data
                 .WithMany(ps => ps.Bookings)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            modelBuilder.Entity<VehicleBooking>()
+                .HasOne(vb => vb.Vehicle)
+                .WithMany(v => v.Bookings)
+                .OnDelete(DeleteBehavior.Restrict);
+
             modelBuilder.Entity<ParkingLot>()
                 .HasOne(pl => pl.Operator)
                 .WithMany(u => u.ManagedLots)
@@ -41,29 +47,59 @@ namespace ParkEase.Api.Data
                 .WithMany(pl => pl.Slots)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            modelBuilder.Entity<ParkingSlot>()
-                .Property(ps => ps.HourlyRate)
-                .HasColumnType("decimal(10,2)");
+            modelBuilder.Entity<Vehicle>()
+                .HasOne(v => v.Owner)
+                .WithMany(u => u.Vehicles)
+                .OnDelete(DeleteBehavior.Restrict);
 
-            modelBuilder.Entity<VehicleBooking>()
-                .Property(vb => vb.TotalFee)
-                .HasColumnType("decimal(10,2)");
+            modelBuilder.Entity<Vehicle>(e =>
+            {
+                e.Property(v => v.VehicleNumber).HasMaxLength(15);
+                e.HasIndex(v => new { v.OwnerId, v.VehicleNumber }).IsUnique();
+            });
 
-            modelBuilder.Entity<VehicleBooking>()
-                .Property(vb => vb.PenaltyFee)
-                .HasColumnType("decimal(10,2)");
+            modelBuilder.Entity<ParkingSlot>(e =>
+            {
+                e.Property(ps => ps.SlotNumber).HasMaxLength(20);
+                e.Property(ps => ps.HourlyRate).HasColumnType("decimal(10,2)");
+                e.HasIndex(ps => new { ps.ParkingLotId, ps.SlotNumber }).IsUnique();
+            });
 
-            // Root-cause fix for a whole class of bugs: SQL Server's datetime2 columns carry
-            // no timezone info, so EF Core reads every DateTime back with Kind=Unspecified even
-            // though every write in this app is DateTime.UtcNow. An Unspecified-kind DateTime
-            // serializes to JSON without a "Z"/offset, and JS's Date parser then treats that as
-            // *local* time — silently shifting every timestamp by the client's UTC offset. Rather
-            // than re-tagging DateTimes by hand at each call site (fragile — easy for a new DTO
-            // to forget), apply one converter to every DateTime/DateTime? property in the model
-            // so this is correct everywhere, including fields no DTO exposes yet.
+            modelBuilder.Entity<VehicleBooking>(e =>
+            {
+                e.Property(vb => vb.VehicleNumber).HasMaxLength(15);
+                e.Property(vb => vb.TotalFee).HasColumnType("decimal(10,2)");
+                e.Property(vb => vb.PenaltyFee).HasColumnType("decimal(10,2)");
+
+                // "Live" = Active (0) or Reserved (4). These two filtered unique indexes make the
+                // database itself refuse a double-booked slot or a vehicle in two slots at once,
+                // so two simultaneous requests can't both win even if both pass the service checks.
+                e.HasIndex(vb => vb.ParkingSlotId)
+                    .IsUnique()
+                    .HasFilter("[Status] IN (0, 4)")
+                    .HasDatabaseName("UX_VehicleBookings_OneLiveBookingPerSlot");
+                e.HasIndex(vb => vb.VehicleId)
+                    .IsUnique()
+                    .HasFilter("[Status] IN (0, 4)")
+                    .HasDatabaseName("UX_VehicleBookings_OneLiveBookingPerVehicle");
+            });
+
+            modelBuilder.Entity<Notification>(e =>
+            {
+                e.Property(n => n.Recipient).HasMaxLength(256);
+                e.Property(n => n.Subject).HasMaxLength(200);
+                e.Property(n => n.Message).HasMaxLength(2000);
+                e.Property(n => n.Provider).HasMaxLength(50);
+                e.Property(n => n.Error).HasMaxLength(500);
+                e.HasIndex(n => new { n.VehicleBookingId, n.Type });
+            });
+
+            // SQL Server's datetime2 stores no timezone, so EF reads every DateTime back as
+            // Kind=Unspecified; the JSON then loses its "Z" and browsers parse it as local time.
+            // Tagging them as UTC here fixes it for every DateTime property in the model.
             var utcConverter = new ValueConverter<DateTime, DateTime>(
-                v => v, // writing: already UTC (DateTime.UtcNow) — pass through
-                v => DateTime.SpecifyKind(v, DateTimeKind.Utc)); // reading: re-tag as UTC
+                v => v,
+                v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
 
             var nullableUtcConverter = new ValueConverter<DateTime?, DateTime?>(
                 v => v,

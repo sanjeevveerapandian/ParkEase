@@ -4,6 +4,7 @@ import {
   ParkingSquare,
   CheckCircle2,
   XCircle,
+  Clock,
   Gauge,
   IndianRupee,
   BarChart3,
@@ -62,7 +63,7 @@ export default function ReportsPage() {
 
       {loading ? (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {Array.from({ length: 6 }).map((_, i) => (
               <Skeleton key={i} className="h-24" />
             ))}
@@ -71,10 +72,11 @@ export default function ReportsPage() {
         </div>
       ) : report ? (
         <>
-          <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             <StatCard icon={<Building2 size={18} />} label="Total Lots" value={report.totalLots} tone="indigo" />
             <StatCard icon={<ParkingSquare size={18} />} label="Total Slots" value={report.totalSlots} tone="slate" />
             <StatCard icon={<XCircle size={18} />} label="Occupied" value={report.occupiedSlots} tone="rose" />
+            <StatCard icon={<Clock size={18} />} label="Reserved" value={report.reservedSlots} tone="amber" />
             <StatCard icon={<CheckCircle2 size={18} />} label="Available" value={report.availableSlots} tone="emerald" />
             <StatCard
               icon={<Gauge size={18} />}

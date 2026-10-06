@@ -9,7 +9,7 @@ import { Button, ErrorMessage, Field, TextInput } from "../../components/ui";
 import type { Role } from "../../types";
 
 function homePathForRole(role: Role) {
-  return role === "Driver" ? "/driver/slots" : "/operator/lots";
+  return role === "Driver" ? "/driver/lots" : "/operator/lots";
 }
 
 export default function LoginPage() {

@@ -1,38 +1,52 @@
 import { useEffect, useState } from "react";
-import type { FormEvent } from "react";
-import { useLocation, useParams } from "react-router-dom";
-import { Car, IndianRupee, ParkingSquare, X } from "lucide-react";
-import { parkingLotsApi, bookingsApi } from "../../api/endpoints";
+import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { ArrowRight, Car, Clock, IndianRupee, ParkingSquare } from "lucide-react";
+import { bookingsApi, parkingLotsApi, vehiclesApi } from "../../api/endpoints";
 import { getErrorMessage } from "../../api/errors";
 import { useToast } from "../../context/ToastContext";
 import SlotSeatMap from "../../components/SlotSeatMap";
 import { LotPageShell } from "../../components/LotPageShell";
-import { Button, Card, EmptyState, PageContainer, TextInput } from "../../components/ui";
-import type { ParkingLotDto, ParkingSlotDto } from "../../types";
+import { VehicleIcon } from "../../components/BookingParts";
+import { slotFitsVehicle } from "../../lib/booking";
+import { Button, Card, EmptyState, LinkButton, PageContainer } from "../../components/ui";
+import type { ParkingLotDto, ParkingSlotDto, VehicleDto } from "../../types";
 
-// Standard Indian registration format: 2-letter state code, 1-2 digit RTO code,
-// 1-2 letter series, 4 digit number (e.g. TN01AB1234). Deliberately lenient on the
-// series length rather than matching every real-world exception (BH-series, defense
-// plates, etc.) — this catches obvious typos/garbage without rejecting valid input.
-const VEHICLE_NUMBER_PATTERN = /^[A-Z]{2}\d{1,2}[A-Z]{1,2}\d{4}$/;
+const HOLD_MINUTES = 15;
+
+function StepHeading({ n, title, done }: { n: number; title: string; done?: boolean }) {
+  return (
+    <h2 className="mb-4 flex items-center gap-2 text-base font-semibold text-slate-900">
+      <span
+        className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold ${
+          done ? "bg-indigo-600 text-white" : "bg-slate-200 text-slate-600"
+        }`}
+      >
+        {n}
+      </span>
+      {title}
+    </h2>
+  );
+}
 
 export default function LotSlotsPage() {
   const { id } = useParams<{ id: string }>();
   const lotId = Number(id);
   const location = useLocation();
+  const navigate = useNavigate();
   const toast = useToast();
 
-  // Prefer the lot summary handed off from BrowseLotsPage (no extra round trip);
-  // fall back to fetching + filtering the open browse list on a direct link/refresh.
   const [lot, setLot] = useState<ParkingLotDto | null>((location.state as { lot?: ParkingLotDto } | null)?.lot ?? null);
   const [slots, setSlots] = useState<ParkingSlotDto[]>([]);
+  const [vehicles, setVehicles] = useState<VehicleDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const [vehicleId, setVehicleId] = useState<number | null>(null);
   const [selected, setSelected] = useState<ParkingSlotDto | null>(null);
-  const [vehicleNumber, setVehicleNumber] = useState("");
   const [bookingError, setBookingError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  const vehicle = vehicles.find((v) => v.id === vehicleId) ?? null;
 
   async function loadSlots() {
     const res = await parkingLotsApi.listSlots(lotId);
@@ -43,7 +57,13 @@ export default function LotSlotsPage() {
     setLoading(true);
     setError("");
     try {
-      const tasks: Promise<unknown>[] = [loadSlots()];
+      const tasks: Promise<unknown>[] = [
+        loadSlots(),
+        vehiclesApi.mine().then((res) => {
+          setVehicles(res.data);
+          if (res.data.length === 1) setVehicleId(res.data[0].id);
+        }),
+      ];
       if (!lot) {
         tasks.push(
           parkingLotsApi.browse().then((res) => {
@@ -66,97 +86,138 @@ export default function LotSlotsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lotId]);
 
+  function chooseVehicle(v: VehicleDto) {
+    setVehicleId(v.id);
+    setBookingError("");
+    // A slot picked for the previous vehicle may not fit this one.
+    if (selected && !slotFitsVehicle(selected, v)) setSelected(null);
+  }
+
   function handleSelect(slot: ParkingSlotDto) {
     setBookingError("");
     setSelected((prev) => (prev?.id === slot.id ? null : slot));
   }
 
-  async function handleBook(e: FormEvent) {
-    e.preventDefault();
-    if (!selected) return;
+  async function handleReserve() {
+    if (!selected || !vehicle) return;
     setBookingError("");
-    if (!VEHICLE_NUMBER_PATTERN.test(vehicleNumber)) {
-      setBookingError("Enter a valid vehicle number, e.g. TN01AB1234.");
-      return;
-    }
     setSubmitting(true);
     try {
-      await bookingsApi.create({ parkingSlotId: selected.id, vehicleNumber });
-      toast.success(`Booked slot ${selected.slotNumber}. Check "My Bookings" for details.`);
-      setSelected(null);
-      setVehicleNumber("");
-      await loadSlots();
+      await bookingsApi.reserve({ vehicleId: vehicle.id, parkingSlotId: selected.id });
+      toast.success(`Slot ${selected.slotNumber} reserved for ${vehicle.vehicleNumber}. Check in within ${HOLD_MINUTES} minutes.`);
+      navigate("/driver/bookings");
     } catch (err) {
-      setBookingError(getErrorMessage(err, "Could not create booking."));
+      setBookingError(getErrorMessage(err, "Could not reserve this slot."));
+      await loadSlots().catch(() => undefined);
+      setSelected(null);
     } finally {
       setSubmitting(false);
     }
   }
 
+  const noVehicles = !loading && !error && vehicles.length === 0;
+
   return (
     <PageContainer>
       <LotPageShell backTo="/driver/lots" lot={lot} lotId={lotId} loading={loading} error={error}>
-        {/* Suppress the slots section entirely when loadAll failed (e.g. the lot was
-            deleted) — otherwise an empty slots array renders a misleading "No slots
-            yet" card alongside the "Lot not found" error above. */}
-        {!error &&
-          (slots.length === 0 ? (
+        {noVehicles && (
+          <Card className="mb-6">
+            <EmptyState
+              icon={<Car size={22} />}
+              title="Add a vehicle first"
+              description="A booking maps one of your vehicles to one slot, so we need to know what you're parking."
+              action={<LinkButton to="/driver/vehicles">Add a vehicle</LinkButton>}
+            />
+          </Card>
+        )}
+
+        {!error && !noVehicles && (
+          <>
+            <Card className="mb-6">
+              <StepHeading n={1} title="Choose your vehicle" done={!!vehicle} />
+              <div className="flex flex-wrap gap-3">
+                {vehicles.map((v) => (
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={() => chooseVehicle(v)}
+                    className={`flex items-center gap-3 rounded-xl border px-4 py-3 text-left transition-all ${
+                      v.id === vehicleId
+                        ? "border-indigo-600 bg-indigo-50 ring-2 ring-indigo-600/20"
+                        : "border-slate-200 bg-white hover:border-slate-300"
+                    }`}
+                  >
+                    <span className="text-indigo-600">
+                      <VehicleIcon type={v.type} size={18} />
+                    </span>
+                    <span>
+                      <span className="block text-sm font-semibold tracking-wide text-slate-900">{v.vehicleNumber}</span>
+                      <span className="block text-xs text-slate-500">{v.type}</span>
+                    </span>
+                  </button>
+                ))}
+                <Link
+                  to="/driver/vehicles"
+                  className="flex items-center rounded-xl border border-dashed border-slate-300 px-4 py-3 text-sm font-medium text-slate-500 hover:border-indigo-400 hover:text-indigo-600"
+                >
+                  + Add another
+                </Link>
+              </div>
+            </Card>
+
+            <Card className="mb-6">
+              <StepHeading n={2} title={vehicle ? `Pick a ${vehicle.type.toLowerCase()} slot` : "Pick a slot"} done={!!selected} />
+              {slots.length === 0 ? (
+                <EmptyState icon={<ParkingSquare size={22} />} title="No slots in this lot yet" />
+              ) : (
+                <>
+                  {!vehicle && <p className="mb-4 text-sm text-slate-500">Choose a vehicle above to see which slots fit it.</p>}
+                  <SlotSeatMap
+                    slots={slots}
+                    selectedId={selected?.id ?? null}
+                    onSelect={handleSelect}
+                    canSelect={(s) => !!vehicle && slotFitsVehicle(s, vehicle)}
+                    dimmed={(s) => s.status === "Available" && !!vehicle && s.vehicleType !== vehicle.type}
+                  />
+                </>
+              )}
+            </Card>
+
             <Card>
-              <EmptyState icon={<ParkingSquare size={22} />} title="No slots in this lot yet" />
+              <StepHeading n={3} title="Reserve" />
+              {vehicle && selected ? (
+                <div className="space-y-4">
+                  <div className="flex flex-wrap items-center gap-3 text-sm">
+                    <span className="inline-flex items-center gap-2 rounded-lg bg-slate-100 px-3 py-2 font-semibold text-slate-900">
+                      <VehicleIcon type={vehicle.type} size={15} /> {vehicle.vehicleNumber}
+                    </span>
+                    <ArrowRight size={16} className="text-slate-400" />
+                    <span className="inline-flex items-center gap-2 rounded-lg bg-indigo-50 px-3 py-2 font-semibold text-indigo-700">
+                      <ParkingSquare size={15} /> Slot {selected.slotNumber}
+                      <span className="inline-flex items-center gap-0.5 font-normal text-indigo-500">
+                        · <IndianRupee size={12} />
+                        {selected.hourlyRate}/hr
+                      </span>
+                    </span>
+                  </div>
+                  <p className="flex items-start gap-2 text-sm text-slate-500">
+                    <Clock size={15} className="mt-0.5 shrink-0" />
+                    We hold the slot for {HOLD_MINUTES} minutes. Billing starts only when you check in, and cancelling or
+                    letting the hold lapse is free. You'll get an SMS and an email.
+                  </p>
+                  {bookingError && <p className="text-sm text-rose-600">{bookingError}</p>}
+                  <Button onClick={handleReserve} loading={submitting}>
+                    {submitting ? "Reserving…" : "Reserve slot"}
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <p className="text-sm text-slate-500">Select a vehicle and a slot to continue.</p>
+                  {bookingError && <p className="mt-2 text-sm text-rose-600">{bookingError}</p>}
+                </>
+              )}
             </Card>
-          ) : (
-            <Card className={selected ? "pb-28" : undefined}>
-              <SlotSeatMap slots={slots} selectedId={selected?.id ?? null} onSelect={handleSelect} />
-            </Card>
-          ))}
-
-        {/* Sticky checkout bar — appears once a slot is picked, like confirming a seat. */}
-        {selected && (
-          <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur-md shadow-[0_-4px_16px_rgba(0,0,0,0.06)] animate-fade-slide-in">
-            <form
-              onSubmit={handleBook}
-              className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-3 sm:px-6 lg:px-8"
-            >
-              <div className="flex items-center gap-2 rounded-lg bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700">
-                <ParkingSquare size={15} />
-                Slot {selected.slotNumber}
-                <span className="flex items-center gap-0.5 font-normal text-indigo-500">
-                  · <IndianRupee size={12} />
-                  {selected.hourlyRate}/hr
-                </span>
-              </div>
-
-              <div className="relative min-w-[180px] flex-1">
-                <Car size={16} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                <TextInput
-                  required
-                  autoFocus
-                  value={vehicleNumber}
-                  onChange={(e) => setVehicleNumber(e.target.value.toUpperCase())}
-                  placeholder="Vehicle number, e.g. TN01AB1234"
-                  className="pl-10 uppercase placeholder:normal-case"
-                />
-              </div>
-
-              <Button type="submit" loading={submitting}>
-                {submitting ? "Booking…" : "Confirm Booking"}
-              </Button>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelected(null);
-                  setVehicleNumber("");
-                  setBookingError("");
-                }}
-                className="rounded-lg p-2.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-                aria-label="Cancel selection"
-              >
-                <X size={18} />
-              </button>
-
-              {bookingError && <p className="w-full text-sm text-rose-600">{bookingError}</p>}
-            </form>
-          </div>
+          </>
         )}
       </LotPageShell>
     </PageContainer>

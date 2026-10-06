@@ -18,45 +18,44 @@ namespace ParkEase.Api.Services
         {
             var lots = await _context.ParkingLots.Include(l => l.Slots).ToListAsync();
 
-            // Revenue = sum of all completed/overstayed bookings' fee + penalty, across the whole system.
-            var totalRevenue = await _context.VehicleBookings
+            // Revenue per lot in one grouped query instead of one query per lot.
+            var revenueByLot = await _context.VehicleBookings
                 .Where(b => b.Status == BookingStatus.Completed || b.Status == BookingStatus.Overstayed)
-                .SumAsync(b => (b.TotalFee ?? 0) + (b.PenaltyFee ?? 0));
+                .GroupBy(b => b.ParkingSlot!.ParkingLotId)
+                .Select(g => new { LotId = g.Key, Revenue = g.Sum(b => (b.TotalFee ?? 0) + (b.PenaltyFee ?? 0)) })
+                .ToDictionaryAsync(x => x.LotId, x => x.Revenue);
 
-            var lotBreakdown = new List<LotUtilizationDto>();
-            int totalSlots = 0, occupiedSlots = 0;
-
-            foreach (var lot in lots)
+            var lotBreakdown = lots.Select(lot =>
             {
-                var lotTotalSlots = lot.Slots.Count;
-                var lotOccupied = lot.Slots.Count(s => s.Status == SlotStatus.Occupied);
-                var lotRevenue = await _context.VehicleBookings
-                    .Where(b => b.ParkingSlot!.ParkingLotId == lot.Id &&
-                                (b.Status == BookingStatus.Completed || b.Status == BookingStatus.Overstayed))
-                    .SumAsync(b => (b.TotalFee ?? 0) + (b.PenaltyFee ?? 0));
-
-                lotBreakdown.Add(new LotUtilizationDto
+                var total = lot.Slots.Count;
+                var occupied = lot.Slots.Count(s => s.Status == SlotStatus.Occupied);
+                var reserved = lot.Slots.Count(s => s.Status == SlotStatus.Reserved);
+                return new LotUtilizationDto
                 {
                     LotId = lot.Id,
                     LotName = lot.Name,
-                    TotalSlots = lotTotalSlots,
-                    OccupiedSlots = lotOccupied,
-                    OccupancyRatePercent = lotTotalSlots == 0 ? 0 : Math.Round((decimal)lotOccupied / lotTotalSlots * 100, 1),
-                    Revenue = lotRevenue
-                });
+                    TotalSlots = total,
+                    OccupiedSlots = occupied,
+                    ReservedSlots = reserved,
+                    OccupancyRatePercent = total == 0 ? 0 : Math.Round((decimal)occupied / total * 100, 1),
+                    Revenue = revenueByLot.GetValueOrDefault(lot.Id)
+                };
+            }).ToList();
 
-                totalSlots += lotTotalSlots;
-                occupiedSlots += lotOccupied;
-            }
+            var totalSlots = lotBreakdown.Sum(l => l.TotalSlots);
+            var occupiedSlots = lotBreakdown.Sum(l => l.OccupiedSlots);
+            var reservedSlots = lotBreakdown.Sum(l => l.ReservedSlots);
+            var availableSlots = lots.Sum(l => l.Slots.Count(s => s.Status == SlotStatus.Available));
 
             return new ReportOverviewDto
             {
                 TotalLots = lots.Count,
                 TotalSlots = totalSlots,
                 OccupiedSlots = occupiedSlots,
-                AvailableSlots = totalSlots - occupiedSlots,
+                ReservedSlots = reservedSlots,
+                AvailableSlots = availableSlots,
                 OverallOccupancyRatePercent = totalSlots == 0 ? 0 : Math.Round((decimal)occupiedSlots / totalSlots * 100, 1),
-                TotalRevenue = totalRevenue,
+                TotalRevenue = lotBreakdown.Sum(l => l.Revenue),
                 LotBreakdown = lotBreakdown
             };
         }

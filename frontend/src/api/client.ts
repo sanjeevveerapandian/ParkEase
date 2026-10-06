@@ -1,9 +1,8 @@
 import axios from "axios";
 
-export const API_BASE_URL = "http://localhost:5241";
+export const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5241";
 
-// In-memory token store. The auth context keeps this in sync with its own
-// state; the interceptor reads from here so it doesn't need React context.
+
 let authToken: string | null = null;
 
 export function setAuthToken(token: string | null) {
