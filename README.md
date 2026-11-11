@@ -171,6 +171,6 @@ Main endpoints:
 
 * Real Twilio delivery needs credentials and, in India, DLT registration; it has been exercised only against
   a stubbed HTTP endpoint.
-* Registration lets a user choose any role, including Admin, which is convenient for a demo. A production
-  deployment should create Admins by seeding or invitation only.
+* Admins exist only through the seeder (self-registration is limited to Driver and Operator). A production
+  deployment should replace the seeded admin password and, ideally, add an invitation flow.
 * There is no payment integration; the fee is calculated and recorded but not collected.

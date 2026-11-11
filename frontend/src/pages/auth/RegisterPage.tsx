@@ -106,7 +106,6 @@ export default function RegisterPage() {
           <Select id="role" value={role} onChange={(e) => setRole(e.target.value as Role)}>
             <option value="Driver">Driver</option>
             <option value="Operator">Operator</option>
-            <option value="Admin">Admin</option>
           </Select>
         </Field>
         <Button type="submit" className="w-full" loading={submitting}>
