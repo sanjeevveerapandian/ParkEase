@@ -49,8 +49,19 @@ Prerequisites: .NET 8 SDK, Node 20+, SQL Server (Express or LocalDB).
 
 ### Backend
 
+First create your local settings file (it is gitignored, so your secrets never get committed):
+
 ```bash
 cd backend/ParkEase.Api
+cp appsettings.Development.example.json appsettings.Development.json
+```
+
+Then edit `appsettings.Development.json`: set the SQL Server name in the connection string and replace
+`Jwt:Key` with 32 or more random characters, for example from
+`node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"`. Leave `Brevo` empty and emails
+are simulated. Then:
+
+```bash
 dotnet restore
 dotnet run
 ```
@@ -58,8 +69,8 @@ dotnet run
 In the Development environment the app applies migrations and seeds demo data on startup, so there is no
 separate `dotnet ef database update` step. Swagger UI is at `/swagger`.
 
-Put your connection string, JWT key and any provider keys in `appsettings.Development.json`. That file is
-gitignored, so never commit secrets. `appsettings.json` shows the keys the app expects:
+`appsettings.json` shows the keys the app expects, and every one can also be set as an environment variable
+(`Jwt__Key` for `Jwt:Key`, and so on):
 
 | Key | Purpose |
 |---|---|
