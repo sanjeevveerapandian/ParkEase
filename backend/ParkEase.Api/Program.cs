@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using ParkEase.Api.Authorization;
@@ -9,11 +10,37 @@ using ParkEase.Api.Services.Notifications;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Fail at start-up with a clear message instead of a NullReference deep inside the auth setup.
+static string Require(IConfiguration config, string key, string hint)
+{
+    var value = config[key];
+    if (string.IsNullOrWhiteSpace(value))
+        throw new InvalidOperationException($"Missing configuration '{key}'. {hint}");
+    return value;
+}
+
+Require(builder.Configuration, "ConnectionStrings:DefaultConnection", "Set it as the environment variable ConnectionStrings__DefaultConnection.");
+Require(builder.Configuration, "Jwt:Issuer", "Set it as the environment variable Jwt__Issuer.");
+Require(builder.Configuration, "Jwt:Audience", "Set it as the environment variable Jwt__Audience.");
+if (Require(builder.Configuration, "Jwt:Key", "Set it as the environment variable Jwt__Key (32+ random characters).").Length < 32)
+    throw new InvalidOperationException("Jwt:Key must be at least 32 characters long.");
+
+// Behind a hosting proxy the app only sees http, so trust the forwarded scheme/IP headers.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 builder.Services.AddControllers();
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseSqlServer(
+        builder.Configuration.GetConnectionString("DefaultConnection"),
+        // Hosted databases (e.g. a free serverless tier that pauses when idle) can refuse the first
+        // connection for a while; retry instead of failing the request.
+        sql => sql.EnableRetryOnFailure(maxRetryCount: 5, maxRetryDelay: TimeSpan.FromSeconds(15), errorNumbersToAdd: null)));
 
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.Configure<BookingOptions>(builder.Configuration.GetSection("Booking"));
@@ -139,10 +166,11 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+app.UseForwardedHeaders();
 app.UseMiddleware<ParkEase.Api.Middleware.GlobalExceptionMiddleware>();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+// Swagger is on in Development, and wherever Swagger:Enabled=true (handy for a reviewer).
+if (app.Environment.IsDevelopment() || app.Configuration.GetValue<bool>("Swagger:Enabled"))
 {
     app.UseSwagger();
     app.UseSwaggerUI();
@@ -160,18 +188,27 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapGet("/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
 
 
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-    // In Development the schema is brought up to date automatically, so a fresh clone (or a
-    // pulled schema change) just works. Elsewhere, run `dotnet ef database update` deliberately.
-    if (app.Environment.IsDevelopment())
+    // Development always migrates and seeds. Elsewhere both are opt-in through configuration
+    // (Database:AutoMigrate, Seed:AdminPassword, Seed:DemoData), so nothing runs by accident
+    // and no default admin password ever exists on a hosted database.
+    var isDev = app.Environment.IsDevelopment();
+    if (isDev || app.Configuration.GetValue<bool>("Database:AutoMigrate"))
         db.Database.Migrate();
 
-    DbSeeder.Seed(db);
+    // Development defaults to a local admin login and demo data; elsewhere both default to off.
+    var adminPassword = app.Configuration["Seed:AdminPassword"];
+    if (isDev && string.IsNullOrWhiteSpace(adminPassword))
+        adminPassword = SeedOptions.Development.AdminPassword;
+    var seed = new SeedOptions(adminPassword, app.Configuration.GetValue("Seed:DemoData", isDev));
+    if (isDev || app.Configuration.GetValue<bool>("Database:AutoMigrate"))
+        DbSeeder.Seed(db, seed);
 }
 
 app.Run();

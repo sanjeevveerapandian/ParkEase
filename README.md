@@ -64,10 +64,13 @@ gitignored, so never commit secrets. `appsettings.json` shows the keys the app e
 | Key | Purpose |
 |---|---|
 | `ConnectionStrings:DefaultConnection` | SQL Server |
-| `Jwt:Key`, `Jwt:Issuer`, `Jwt:Audience`, `Jwt:ExpiryMinutes` | token signing |
+| `Jwt:Key` (32+ characters), `Jwt:Issuer`, `Jwt:Audience`, `Jwt:ExpiryMinutes` (default 60) | token signing; the app refuses to start if the first three are missing |
 | `Cors:AllowedOrigins` | frontend origins allowed to call the API (default `http://localhost:5173`) |
 | `Booking:ReservationHoldMinutes` | how long a reservation is held (default 15) |
 | `Booking:MaintenanceIntervalSeconds` | worker tick (default 60) |
+| `Database:AutoMigrate` | outside Development, set `true` to create/update the schema at start-up (default off) |
+| `Seed:AdminPassword`, `Seed:DemoData` | outside Development, an Admin exists only if you set a password, and demo data only if `true` |
+| `Swagger:Enabled` | `true` to expose `/swagger` outside Development |
 | `Sms:Provider` | `Log` (default, delivers nothing) or `Twilio` |
 | `Sms:Twilio:AccountSid`, `AuthToken`, `From` or `MessagingServiceSid` | Twilio credentials |
 | `Brevo:ApiKey`, `Brevo:SenderEmail`, `Brevo:SenderName` | email; unset means emails are simulated |
@@ -118,6 +121,12 @@ npm run dev
 
 The API URL comes from `VITE_API_URL` in `frontend/.env` (see `.env.example`), defaulting to
 `http://localhost:5241`.
+
+### Deploying
+
+See [docs/DEPLOY.md](docs/DEPLOY.md): step-by-step for Azure SQL (free offer), the API (Azure App Service or any
+container host, a `Dockerfile` is included) and the frontend on Vercel, plus a troubleshooting table. Set
+`VITE_DEMO_LOGINS=true` on a public demo to show one-click Driver/Operator logins on the login page.
 
 ### Tests
 

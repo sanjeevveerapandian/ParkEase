@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Mail, Lock } from "lucide-react";
+import { Mail, Lock, Car, Building2 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { getErrorMessage } from "../../api/errors";
 import AuthLayout from "../../components/AuthLayout";
@@ -11,6 +11,14 @@ import type { Role } from "../../types";
 function homePathForRole(role: Role) {
   return role === "Driver" ? "/driver/lots" : "/operator/lots";
 }
+
+// One-click logins for the seeded demo accounts. Only shown when the deployment opts in with
+// VITE_DEMO_LOGINS=true, so a real installation never advertises credentials.
+const SHOW_DEMO_LOGINS = import.meta.env.VITE_DEMO_LOGINS === "true";
+const DEMO_ACCOUNTS = [
+  { label: "Try as a Driver", email: "driver@parkease.com", password: "Driver@123", icon: Car },
+  { label: "Try as an Operator", email: "operator@parkease.com", password: "Operator@123", icon: Building2 },
+];
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -24,10 +32,14 @@ export default function LoginPage() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    await signIn(email, password);
+  }
+
+  async function signIn(emailValue: string, passwordValue: string) {
     setError("");
     setSubmitting(true);
     try {
-      const role = await login({ email, password });
+      const role = await login({ email: emailValue, password: passwordValue });
       const redirectTo = (location.state as { from?: string } | null)?.from;
       navigate(redirectTo ?? homePathForRole(role), { replace: true });
     } catch (err) {
@@ -73,6 +85,28 @@ export default function LoginPage() {
           {submitting ? "Logging in…" : "Log in"}
         </Button>
       </form>
+      {SHOW_DEMO_LOGINS && (
+        <div className="mt-6 rounded-xl border border-indigo-100 bg-indigo-50/60 p-4">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-indigo-600">Demo accounts</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {DEMO_ACCOUNTS.map(({ label, email: demoEmail, password: demoPassword, icon: Icon }) => (
+              <Button
+                key={demoEmail}
+                type="button"
+                variant="secondary"
+                icon={<Icon size={15} />}
+                disabled={submitting}
+                onClick={() => signIn(demoEmail, demoPassword)}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-slate-500">
+            Sample data for exploring the app. Please don't enter anything private.
+          </p>
+        </div>
+      )}
       <p className="mt-6 text-center text-sm text-slate-500">
         Don't have an account?{" "}
         <Link to="/register" className="font-medium text-indigo-600 hover:text-indigo-500">

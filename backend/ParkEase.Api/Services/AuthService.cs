@@ -76,7 +76,7 @@ namespace ParkEase.Api.Services
             var jwtKey = _configuration["Jwt:Key"]!;
             var jwtIssuer = _configuration["Jwt:Issuer"]!;
             var jwtAudience = _configuration["Jwt:Audience"]!;
-            var expiryMinutes = int.Parse(_configuration["Jwt:ExpiryMinutes"]!);
+            var expiryMinutes = _configuration.GetValue("Jwt:ExpiryMinutes", 60);
 
             var claims = new List<Claim>
             {

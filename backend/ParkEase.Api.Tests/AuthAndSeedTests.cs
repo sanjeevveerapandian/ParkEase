@@ -67,6 +67,22 @@ namespace ParkEase.Api.Tests
         }
 
         [Fact]
+        public async Task Token_lifetime_defaults_to_an_hour_when_not_configured()
+        {
+            using var db = NewDb();
+            var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Jwt:Key"] = "unit-test-signing-key-that-is-long-enough-for-hmac-sha256",
+                ["Jwt:Issuer"] = "ParkEase.Tests",
+                ["Jwt:Audience"] = "ParkEase.Tests.Clients"
+            }).Build();
+
+            var result = await new AuthService(db, config).RegisterAsync(Registration());
+
+            Assert.InRange(result.Value!.ExpiresAt, DateTime.UtcNow.AddMinutes(59), DateTime.UtcNow.AddMinutes(61));
+        }
+
+        [Fact]
         public async Task A_duplicate_email_is_a_conflict()
         {
             using var db = NewDb();
@@ -167,6 +183,41 @@ namespace ParkEase.Api.Tests
 
             Assert.All(db.Users.ToList(), u =>
                 Assert.True(ParkEase.Api.Services.Notifications.PhoneNumber.TryNormalize(u.PhoneNumber, out _), u.Email));
+        }
+
+        [Fact]
+        public void Production_options_with_no_admin_password_create_no_admin_and_no_demo_data()
+        {
+            using var db = NewDb();
+
+            DbSeeder.Seed(db, new SeedOptions(AdminPassword: null, DemoData: false));
+
+            Assert.Empty(db.Users);
+            Assert.Empty(db.ParkingLots);
+        }
+
+        [Fact]
+        public void A_configured_admin_password_is_used_instead_of_the_default()
+        {
+            using var db = NewDb();
+
+            DbSeeder.Seed(db, new SeedOptions("Str0ng!Prod-Secret", DemoData: false));
+
+            var admin = Assert.Single(db.Users);
+            Assert.Equal(UserRole.Admin, admin.Role);
+            Assert.True(BCrypt.Net.BCrypt.Verify("Str0ng!Prod-Secret", admin.PasswordHash));
+            Assert.False(BCrypt.Net.BCrypt.Verify("Admin@123", admin.PasswordHash));
+        }
+
+        [Fact]
+        public void Demo_data_can_be_seeded_without_an_admin()
+        {
+            using var db = NewDb();
+
+            DbSeeder.Seed(db, new SeedOptions(AdminPassword: "", DemoData: true));
+
+            Assert.Equal(0, db.Users.Count(u => u.Role == UserRole.Admin));
+            Assert.Equal(2, db.ParkingLots.Count());
         }
 
         [Fact]

@@ -2,21 +2,32 @@ using ParkEase.Api.Models;
 
 namespace ParkEase.Api.Data
 {
+    // AdminPassword: an Admin is created only when this is set. DemoData: also create the demo
+    // Operator, Driver, lots and vehicles (on an empty database only).
+    public record SeedOptions(string? AdminPassword, bool DemoData)
+    {
+        // What a local clone gets: a known admin login plus demo data.
+        public static readonly SeedOptions Development = new("Admin@123", true);
+    }
+
     // Gives a fresh clone something to log in and click through: an Admin, and (only on an empty
     // database) a demo Operator with two lots, plus a demo Driver with a car and a bike.
+    // Production passes its own options, so a hosted site never ships a well-known admin password.
     public static class DbSeeder
     {
-        public static void Seed(ApplicationDbContext db)
+        public static void Seed(ApplicationDbContext db, SeedOptions? options = null)
         {
-            if (!db.Users.Any(u => u.Role == UserRole.Admin))
+            options ??= SeedOptions.Development;
+
+            if (!string.IsNullOrWhiteSpace(options.AdminPassword) && !db.Users.Any(u => u.Role == UserRole.Admin))
             {
-                db.Users.Add(NewUser("System Admin", "admin@parkease.com", "Admin@123", "9999999999", UserRole.Admin));
+                db.Users.Add(NewUser("System Admin", "admin@parkease.com", options.AdminPassword, "9999999999", UserRole.Admin));
                 db.SaveChanges();
-                Console.WriteLine("Seeded default Admin: admin@parkease.com / Admin@123");
+                Console.WriteLine("Seeded Admin: admin@parkease.com");
             }
 
             // Guarded on "no lots yet" rather than on the specific accounts, same as the Admin seed.
-            if (db.ParkingLots.Any()) return;
+            if (!options.DemoData || db.ParkingLots.Any()) return;
 
             var op = NewUser("Demo Operator", "operator@parkease.com", "Operator@123", "9888888888", UserRole.Operator);
             var driver = NewUser("Demo Driver", "driver@parkease.com", "Driver@123", "9777777777", UserRole.Driver);
