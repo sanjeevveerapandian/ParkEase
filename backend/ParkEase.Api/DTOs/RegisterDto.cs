@@ -20,6 +20,6 @@ namespace ParkEase.Api.DTOs
         public string PhoneNumber { get; set; } = string.Empty;
 
         [Required, EnumName(typeof(UserRole))]
-        public string Role { get; set; } = string.Empty; // "Driver", "Operator", or "Admin"
+        public string Role { get; set; } = string.Empty; // "Driver" or "Operator"
     }
 }

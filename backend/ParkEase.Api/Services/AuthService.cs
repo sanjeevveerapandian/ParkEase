@@ -29,7 +29,11 @@ namespace ParkEase.Api.Services
                 return ServiceResult<AuthResponseDto>.Fail(ServiceErrorCode.Conflict, "An account with this email already exists.");
 
             if (!Enum.TryParse<UserRole>(dto.Role, true, out var parsedRole))
-                return ServiceResult<AuthResponseDto>.Fail(ServiceErrorCode.Validation, "Role must be Driver, Operator or Admin.");
+                return ServiceResult<AuthResponseDto>.Fail(ServiceErrorCode.Validation, "Role must be Driver or Operator.");
+
+            // Admins are created by the seeder only, never through the public sign-up form.
+            if (parsedRole == UserRole.Admin)
+                return ServiceResult<AuthResponseDto>.Fail(ServiceErrorCode.Validation, "Admin accounts can't be self-registered. Choose Driver or Operator.");
 
             // Stored in +E.164 form because SMS alerts are sent to this number.
             if (!PhoneNumber.TryNormalize(dto.PhoneNumber, out var phone))

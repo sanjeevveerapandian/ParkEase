@@ -16,7 +16,7 @@ namespace ParkEase.Api.Controllers
         }
 
         /// <summary>
-        /// Registers a new user (Driver, Operator, or Admin) and returns a JWT access token.
+        /// Registers a new Driver or Operator and returns a JWT access token.
         /// </summary>
         /// <remarks>
         /// Sample request:
@@ -30,10 +30,10 @@ namespace ParkEase.Api.Controllers
         ///        "role": "Driver"
         ///     }
         ///
-        /// Role must be exactly one of: Driver, Operator, Admin.
+        /// Role must be Driver or Operator. Admin accounts can't be self-registered.
         /// </remarks>
         /// <response code="201">User created successfully — returns the JWT token.</response>
-        /// <response code="400">Validation failed (e.g. invalid mobile number, short password, unknown role).</response>
+        /// <response code="400">Validation failed (e.g. invalid mobile number, short password, unknown role, or Admin).</response>
         /// <response code="409">An account with this email already exists.</response>
         [HttpPost("register")]
         [ProducesResponseType(typeof(AuthResponseDto), 201)]

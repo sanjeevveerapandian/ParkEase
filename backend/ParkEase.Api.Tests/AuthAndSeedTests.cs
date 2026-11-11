@@ -91,6 +91,18 @@ namespace ParkEase.Api.Tests
         }
 
         [Fact]
+        public async Task Admin_accounts_cannot_be_self_registered()
+        {
+            using var db = NewDb();
+
+            var result = await NewService(db).RegisterAsync(Registration(role: "Admin"));
+
+            Assert.Equal(ServiceErrorCode.Validation, result.Error!.Code);
+            Assert.Contains("Admin", result.Error.Message);
+            Assert.Empty(db.Users);
+        }
+
+        [Fact]
         public async Task An_unknown_role_is_rejected()
         {
             using var db = NewDb();
