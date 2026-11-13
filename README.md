@@ -4,7 +4,7 @@ A parking management system I built as a proof of concept during my internship a
 
 Built with an ASP.NET Core 8 API (EF Core, SQL Server, JWT) and a React + TypeScript frontend.
 
-![Driver dashboard](docs/images/driver-dashboard.png)
+
 
 ## How a booking works
 
@@ -14,7 +14,7 @@ Built with an ASP.NET Core 8 API (EF Core, SQL Server, JWT) and a React + TypeSc
 
 You can cancel for free any time before check-in.
 
-![Operator view](docs/images/operator-view.png)
+
 
 ## Roles
 
