@@ -1,68 +1,64 @@
 # ParkEase
 
-A parking slot booking app. Drivers book a slot, operators run the parking lot, and admins see everything.
+A parking management system I built as a proof of concept during my internship at Kanini. Drivers reserve a slot, check in and exit, and the system works out the fee and sends a receipt. Operators manage their own lots, and an admin sees everything.
 
-This started as a task during my internship at Kanini.
+Built with an ASP.NET Core 8 API (EF Core, SQL Server, JWT) and a React + TypeScript frontend.
 
-Backend is ASP.NET Core 8 with SQL Server. Frontend is React with TypeScript.
+![Driver dashboard](docs/images/driver-dashboard.png)
 
-<!-- screenshots go here -->
+## How a booking works
 
-## How it works
+1. **Reserve.** A free slot of the right type (car or bike) is held for 15 minutes at no charge. Unclaimed holds expire on their own.
+2. **Check in.** The slot becomes occupied and billing starts.
+3. **Exit.** The fee is calculated (hours rounded up, 1.5x after 24 hours), the slot is freed, and a receipt goes out by email.
 
-![Architecture](docs/images/architecture.png)
+You can cancel for free any time before check-in.
 
-The React app talks to the API. Every request carries a JWT token, and the API checks the user's role before doing anything.
-
-Inside the API it's simple layers: controllers take the request, services do the actual work, and EF Core talks to the database.
-
-After every booking step, the app sends an SMS and an email. If the SMS fails, the booking still goes through. The failure is just saved so the driver can see it.
-
-## A booking, step by step
-
-![Booking lifecycle](docs/images/booking-lifecycle.png)
-
-1. **Reserve.** The driver picks their vehicle and a free slot. The slot is held for 15 minutes.
-2. **Check in.** When they arrive, they check in. Billing starts now, not at reservation.
-3. **Exit.** The fee is calculated, the slot is freed, and a receipt is sent.
-
-If the driver never shows up, the hold expires on its own and nothing is charged. A background job checks for this every minute.
-
-Fee: hours are rounded up, and after 24 hours it's charged at 1.5x.
-
-## Things I learned building it
-
-- **Let the database stop double booking.** Checking in code isn't enough, because two people can book the same slot at the same moment. I added a unique index in SQL Server, so only one booking can win.
-- **Split "reserve" and "check in".** If billing started at booking, a late driver would pay for time they weren't parked. So billing starts at check-in.
-- **Never send database entities out of the API.** Every endpoint uses DTOs, so internal fields don't leak.
-- **Inject the clock.** I used `TimeProvider` so I could test "15 minutes later" without actually waiting 15 minutes.
+![Operator view](docs/images/operator-view.png)
 
 ## Roles
 
-- **Driver:** add vehicles, book, check in, exit, cancel
-- **Operator:** manage their own lots and slots, check vehicles in and out
-- **Admin:** everything, plus the occupancy and revenue report
+- **Driver:** manages their vehicles and bookings
+- **Operator:** manages their own lots and slots, and checks vehicles in and out
+- **Admin:** everything an operator can do, across all lots, plus the system report
+
+## How it's built
+
+![Architecture](docs/images/architecture.png)
+
+Controllers call services, services use EF Core, and DTOs sit at every API boundary so database entities never leak out.
+
+A few decisions I'm happy with:
+
+- **No double-booking.** A filtered unique index in SQL Server stops two people grabbing the same slot, even if they click at the same moment.
+- **Nothing gets silently deleted.** Foreign keys use `Restrict` instead of cascade, so deleting an operator can't wipe out their lots and booking history.
+- **Notifications never block a booking.** If an email fails, the booking still goes through and the failure is logged.
+- **Operators only see their own lots.** Anyone else's lot returns 404.
 
 ## Run it
 
-You need .NET 8, Node 20 and SQL Server.
+**Backend** (needs .NET 8 and SQL Server)
 
 ```bash
-# backend
 cd backend/ParkEase.Api
 cp appsettings.Development.example.json appsettings.Development.json
-# put your SQL Server connection string and a JWT key in that file
+# set your SQL Server connection and a Jwt:Key (32+ characters)
 dotnet run
+```
 
-# frontend
+The API runs at http://localhost:5241 with Swagger at `/swagger`. Demo data loads on first run.
+
+**Frontend** (needs Node 20+)
+
+```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-The backend creates the database and some demo data on first run. Swagger is at `/swagger`.
+Open http://localhost:5173
 
-Demo logins:
+**Demo logins**
 
 | Role | Email | Password |
 |---|---|---|
@@ -70,10 +66,7 @@ Demo logins:
 | Operator | operator@parkease.com | Operator@123 |
 | Driver | driver@parkease.com | Driver@123 |
 
-SMS is simulated by default (nothing is actually sent). All settings and how to turn on real SMS are in [docs/SETUP.md](docs/SETUP.md). Full booking rules are in [docs/FLOW.md](docs/FLOW.md).
+## Known limits
 
-## What's not done yet
-
-- No payment integration. The fee is calculated but not collected.
-- Real SMS is only tested against a fake endpoint.
-- Admins can only be created by the seed data.
+- No real payments. Fees are calculated and recorded only
+- Admins can only be created by the seeder
