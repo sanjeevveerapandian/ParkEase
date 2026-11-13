@@ -1,196 +1,101 @@
-# ParkEase — Smart Parking Management System
+# ParkEase
 
-Full-stack parking platform: an ASP.NET Core Web API with JWT role-based auth and a React + TypeScript
-frontend. A driver registers a vehicle, reserves a matching slot, checks in, parks and exits; billing, slot
-state and SMS/email notifications follow the booking automatically.
+A parking booking system I built end to end: ASP.NET Core 8 API, React + TypeScript frontend, SQL Server.
 
-## How it works
+A driver adds their car or bike, reserves a free slot of the right type, checks in when they arrive, and pays when they leave. Operators manage their own lots and run the gate. Admins see everything. Every step sends an SMS and an email.
 
-1. **Reserve** — the driver picks one of their vehicles and a free slot of the same type (Car or Bike). The
-   slot is held for 15 minutes. No billing yet.
-2. **Check in** — when the vehicle arrives (driver, or operator at the gate). The slot becomes Occupied and
-   billing starts.
-3. **Exit** — the fee is calculated (hours rounded up, 1.5x after 24 h), the slot is freed and a receipt is sent.
+<!-- SCREENSHOTS: driver booking page, operator slot map, admin report go here -->
 
-A hold that nobody checks in for expires on its own; a reservation can be cancelled for free until check-in.
-Every step sends an **SMS and an email** and is logged in the Notifications table.
+## How it fits together
 
-Full detail, with the state diagram, sequence diagram and notification matrix, is in
-[docs/FLOW.md](docs/FLOW.md). The data model is in [docs/ER-diagram.md](docs/ER-diagram.md).
+![Architecture sketch](docs/images/architecture.png)
 
-## Tech stack
+Pretty standard layering: Controllers, then Services, then EF Core. Some rules I stuck to:
 
-**Backend:** ASP.NET Core 8 · EF Core 8 (code-first, SQL Server) · JWT · BCrypt · Swagger/OpenAPI
-**Frontend:** React 19 + TypeScript (Vite) · Tailwind CSS · Axios · React Router
-**Notifications:** SMS via Twilio (or a logging stub), email via Brevo
-**Tests:** xUnit + EF Core InMemory
+- **Entities never leave the API.** Every endpoint takes and returns DTOs.
+- **Services don't throw for business errors.** They return a `ServiceResult<T>`, and the controller turns its error code into a 400, 403, 404 or 409.
+- **The database has the final say on double booking.** Two filtered unique indexes allow only one live booking per slot and per vehicle. If two drivers grab the same slot at the same moment, one wins and the other gets a clean 409 instead of a 500.
+- **Time comes from `TimeProvider`**, so expiry and overstay logic is tested with a fake clock instead of `Thread.Sleep`.
 
-## Architecture
+## A booking, start to finish
 
-Controllers → Services → EF Core `DbContext`, with DTOs at every API boundary (entities are never exposed).
+![Booking lifecycle](docs/images/booking-lifecycle.png)
 
-* Services return a `ServiceResult<T>`; the controller layer maps its error code to 400 / 403 / 404 / 409.
-* Business rules that must never be violated (one live booking per slot and per vehicle) are enforced by
-  filtered unique indexes in SQL Server, not only by code.
-* `BookingMaintenanceWorker` expires stale reservations and sends overstay warnings.
-* Time comes from `TimeProvider`, so lifecycle logic is unit-tested with a fake clock.
+I split booking into **reserve** and **check in** on purpose. Billing starts at check-in, so a driver who's late or doesn't show up isn't charged, and the slot isn't blocked forever. The hold just expires after 15 minutes. A background worker runs every minute to expire stale holds and send overstay warnings.
+
+Fees: hours are rounded up (61 minutes bills 2 hours), and every hour past 24 is billed at 1.5x.
+
+Full rules, the sequence diagram and the notification matrix are in [docs/FLOW.md](docs/FLOW.md). The data model is in [docs/ER-diagram.md](docs/ER-diagram.md).
 
 ## Roles
 
 | Role | Can do |
 |---|---|
-| **Driver** | Manage own vehicles, reserve slots, check in / exit / cancel own bookings, see own notifications |
-| **Operator** | Manage own lots and slots (add, maintenance, delete), see who is mapped to which slot, check vehicles in/out |
-| **Admin** | Everything an operator can do for every lot, plus the system report |
+| Driver | Add vehicles, reserve, check in, exit, cancel own bookings, see own alerts |
+| Operator | Manage own lots and slots, put slots in maintenance, see which vehicle is in which slot, check vehicles in and out |
+| Admin | Everything an operator can do, for every lot, plus the occupancy and revenue report |
 
-## Getting started
+Operators get a 404 for lots that aren't theirs, not a 403, so lot ids can't be probed.
 
-Prerequisites: .NET 8 SDK, Node 20+, SQL Server (Express or LocalDB).
+## Stack
 
-### Backend
+**Backend:** ASP.NET Core 8, EF Core 8 (code-first), SQL Server, JWT, BCrypt, Swagger
+**Frontend:** React 19, TypeScript, Vite, Tailwind, React Router, Axios
+**Notifications:** Twilio for SMS (or a stub that just logs), Brevo for email
+**Tests:** xUnit with EF Core InMemory
 
-First create your local settings file (it is gitignored, so your secrets never get committed):
+## Run it locally
+
+You need the .NET 8 SDK, Node 20+ and SQL Server (Express or LocalDB).
 
 ```bash
+# backend
 cd backend/ParkEase.Api
 cp appsettings.Development.example.json appsettings.Development.json
+# set your SQL Server connection string and a 32+ char Jwt:Key in that file
+dotnet run              # migrates and seeds demo data, Swagger at /swagger
+
+# frontend
+cd frontend
+npm install
+npm run dev             # http://localhost:5173
 ```
 
-Then edit `appsettings.Development.json`: set the SQL Server name in the connection string and replace
-`Jwt:Key` with 32 or more random characters, for example from
-`node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"`. Leave `Brevo` empty and emails
-are simulated. Then:
-
-```bash
-dotnet restore
-dotnet run
-```
-
-In the Development environment the app applies migrations and seeds demo data on startup, so there is no
-separate `dotnet ef database update` step. Swagger UI is at `/swagger`.
-
-`appsettings.json` shows the keys the app expects, and every one can also be set as an environment variable
-(`Jwt__Key` for `Jwt:Key`, and so on):
-
-| Key | Purpose |
-|---|---|
-| `ConnectionStrings:DefaultConnection` | SQL Server |
-| `Jwt:Key` (32+ characters), `Jwt:Issuer`, `Jwt:Audience`, `Jwt:ExpiryMinutes` (default 60) | token signing; the app refuses to start if the first three are missing |
-| `Cors:AllowedOrigins` | frontend origins allowed to call the API (default `http://localhost:5173`) |
-| `Booking:ReservationHoldMinutes` | how long a reservation is held (default 15) |
-| `Booking:MaintenanceIntervalSeconds` | worker tick (default 60) |
-| `Database:AutoMigrate` | outside Development, set `true` to create/update the schema at start-up (default off) |
-| `Seed:AdminPassword`, `Seed:DemoData` | outside Development, an Admin exists only if you set a password, and demo data only if `true` |
-| `Swagger:Enabled` | `true` to expose `/swagger` outside Development |
-| `Sms:Provider` | `Log` (default, delivers nothing) or `Twilio` |
-| `Sms:Twilio:AccountSid`, `AuthToken`, `From` or `MessagingServiceSid` | Twilio credentials |
-| `Brevo:ApiKey`, `Brevo:SenderEmail`, `Brevo:SenderName` | email; unset means emails are simulated |
-
-**Demo accounts** (seeded on an empty database):
+Demo logins (seeded on an empty database):
 
 | Role | Email | Password |
 |---|---|---|
-| Admin | `admin@parkease.com` | `Admin@123` |
-| Operator | `operator@parkease.com` | `Operator@123` |
-| Driver | `driver@parkease.com` | `Driver@123` |
+| Admin | admin@parkease.com | Admin@123 |
+| Operator | operator@parkease.com | Operator@123 |
+| Driver | driver@parkease.com | Driver@123 |
 
-The operator owns two lots in Chennai (Mylapore Temple Parking, Porur Junction Parking) with five slots
-across them, and the driver has a car (`TN09AB1234`) and a bike (`TN09XY4321`).
+SMS is simulated by default: messages are saved with status `Simulated` and nothing is sent. Every config key, how to switch on real Twilio SMS, and the deploy guide are in [docs/SETUP.md](docs/SETUP.md) and [docs/DEPLOY.md](docs/DEPLOY.md).
 
-### Turning on real SMS
-
-By default SMS is **simulated**: the message is written to the Notifications table with status `Simulated`
-and nothing is sent. To send for real through Twilio:
-
-```json
-"Sms": {
-  "Provider": "Twilio",
-  "Twilio": {
-    "AccountSid": "AC...",
-    "AuthToken": "...",
-    "From": "+1..."
-  }
-}
-```
-
-(or set `MessagingServiceSid` instead of `From`). Notes:
-
-* Twilio trial accounts can only text numbers you have verified in the Twilio console.
-* Sending to Indian numbers for production use requires sender/template registration under the DLT rules.
-* If `Provider` is `Twilio` but the credentials are incomplete, the app falls back to the logging sender.
-* Failures never break a booking. They are stored with their error and shown to the driver on the Alerts page.
-
-Phone numbers are accepted as `9876543210`, `+91 98765 43210` and similar, and stored as `+919876543210`.
-
-### Frontend
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-The API URL comes from `VITE_API_URL` in `frontend/.env` (see `.env.example`), defaulting to
-`http://localhost:5241`.
-
-### Deploying
-
-See [docs/DEPLOY.md](docs/DEPLOY.md): step-by-step for Azure SQL (free offer), the API (Azure App Service or any
-container host, a `Dockerfile` is included) and the frontend on Vercel, plus a troubleshooting table. Set
-`VITE_DEMO_LOGINS=true` on a public demo to show one-click Driver/Operator logins on the login page.
-
-### Tests
+Tests:
 
 ```bash
 cd backend
 dotnet test ParkEase.Api/ParkEase.Api.slnx
 ```
 
-The suite covers the booking lifecycle and its rules, the vehicle-to-slot mapping, fee calculation,
-expiry and overstay warnings, role scoping, the notification pipeline (including provider failures and
-the Twilio request shape), registration/login and the seeder.
+They cover the booking lifecycle, vehicle-to-slot matching, fee calculation, expiry and overstay, role scoping, and the notification pipeline including provider failures.
 
-## API documentation
+## API
 
-Swagger UI lists every endpoint with request/response examples and auth requirements. A Postman collection
-is in `docs/`.
+Swagger lists everything. A Postman collection is in `docs/`. The main ones:
 
-Main endpoints:
-
-| Method and path | Who | Purpose |
+| Endpoint | Who | What |
 |---|---|---|
-| `POST /api/auth/register`, `/api/auth/login` | public | accounts |
-| `GET/POST/DELETE /api/vehicles` | Driver | manage vehicles |
-| `GET /api/parkinglots/browse`, `GET /api/parkinglots/{id}/slots` | any user | find slots |
-| `POST /api/bookings` | Driver | reserve a slot for a vehicle |
-| `POST /api/bookings/{id}/check-in`, `/exit`, `/cancel` | owner, lot operator, admin | lifecycle |
-| `GET /api/bookings/mine` | Driver | own bookings |
-| `GET /api/bookings/lot/{lotId}` | Operator, Admin | vehicle-to-slot mapping for a lot |
-| `GET /api/notifications/mine` | Driver | SMS/email log |
-| `POST/PATCH/DELETE /api/parkinglots/...` | Operator, Admin | lots, slots, maintenance |
+| `POST /api/auth/register`, `/login` | anyone | accounts |
+| `GET/POST/DELETE /api/vehicles` | Driver | vehicles |
+| `GET /api/parkinglots/browse`, `/{id}/slots` | any user | find a slot |
+| `POST /api/bookings` | Driver | reserve |
+| `POST /api/bookings/{id}/check-in`, `/exit`, `/cancel` | owner, operator, admin | lifecycle |
+| `GET /api/bookings/lot/{lotId}` | Operator, Admin | who's parked where |
 | `GET /api/reports/overview` | Admin | occupancy and revenue |
 
-## Git workflow
+## Known gaps
 
-`main` ← `develop` ← (`backend` | `frontend`) ← `feature/*`
-
-## Design decisions
-
-* **Reserve, then check in.** Billing starts at check-in, so a driver who is late or never shows is not
-  charged, and the slot is not blocked forever (the hold expires).
-* **Vehicles are records, not text.** A booking references a registered vehicle, which is what lets the
-  system check that a bike isn't put in a car slot and that one vehicle isn't in two places at once.
-* **The database is the final referee.** Filtered unique indexes make double-booking impossible even if two
-  requests race.
-* **Notifications never fail a booking.** Each send is recorded as Sent, Simulated or Failed with the reason.
-* **Restrict, not Cascade.** Foreign keys use `Restrict` so booking history can't be wiped by deleting a lot,
-  slot or vehicle; vehicles with history are archived instead.
-* **Operators see only their own lots.** Anything else returns 404, so ids can't be probed.
-
-## Known limitations
-
-* Real Twilio delivery needs credentials and, in India, DLT registration; it has been exercised only against
-  a stubbed HTTP endpoint.
-* Admins exist only through the seeder (self-registration is limited to Driver and Operator). A production
-  deployment should replace the seeded admin password and, ideally, add an invitation flow.
-* There is no payment integration; the fee is calculated and recorded but not collected.
+- Real Twilio delivery has only been tested against a stubbed endpoint. Sending to Indian numbers in production also needs DLT registration.
+- Admins only come from the seeder; there's no invite flow yet.
+- The fee is calculated and stored, but there's no payment integration.
